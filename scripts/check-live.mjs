@@ -51,7 +51,7 @@ try {
   await request('/api/settings', {
     mode: 'live',
     provider: 'google',
-    model: process.env.CHESSLASSO_MODEL ?? 'gemini-3-flash-preview',
+    model: process.env.CHESSLASSO_MODEL ?? 'gemini-3.8-flash',
     budget: { mode: 'hard', amount: 3 },
   });
   const before = await request('/api/state');

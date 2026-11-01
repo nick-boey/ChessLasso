@@ -13,7 +13,7 @@ npm run dev
 
 Open http://127.0.0.1:5173. The production build runs with `npm run build && npm start` at http://127.0.0.1:3001. Both bind to loopback. A first run uses deterministic mock coaching. Open **Settings**, choose **Live model + Stockfish**, and save to use the server-side `GEMINI_API_KEY` in `.env`. Keys never enter the frontend. Runtime settings survive restart. `.env.example` documents optional configuration; do not overwrite an existing `.env` containing a key.
 
-The verified live default is **gemini-3-flash-preview**. The requested **gemini-3.8-flash** appears in this account's model list but repeatedly timed out during verification. There is no silent model fallback: Settings shows and changes the exact model/provider. Fireworks is supported by Pi and requires `FIREWORKS_API_KEY`, an available Pi model ID and explicit selection; it has not been live tested.
+The live default is **gemini-3.8-flash**. There is no silent model fallback: Settings shows and changes the exact model/provider. Fireworks is supported by Pi and requires `FIREWORKS_API_KEY`, an available Pi model ID and explicit selection; it has not been live tested.
 
 Enter `Nc3` in the initial position. Stockfish plays the opponent in live mode; the coach decides how to respond. Discuss your plan, ask for an example, request a fresh independent game or ask the coach to set up a position. Only the coach changes activities. **Observe** requests less help; **Hint** requests assistance. All player moves require legal short algebraic notation. Settings can pause practice and change/remove the monthly budget at runtime. Progress supports PGN paste and incremental Chess.com imports; original metadata and bytes are retained, malformed imports are quarantined.
 

@@ -174,7 +174,7 @@ export class Store {
         budget: { mode: 'none', amount: 50 },
         mode: 'mock',
         provider: 'google',
-        model: process.env.CHESSLASSO_MODEL ?? 'gemini-3-flash-preview',
+        model: process.env.CHESSLASSO_MODEL ?? 'gemini-3.8-flash',
         paused: false,
       } satisfies Workspace);
     }

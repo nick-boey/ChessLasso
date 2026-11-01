@@ -14,6 +14,7 @@ Operations tests exercise QuickJS host/network/loop/memory/output denial, Sydney
 
 ## Live verification
 
+- On 2 November, after the user reported adding billing, `gemini-3.8-flash` passed the bounded native Pi→inspect_board→Stockfish analyse_position check (estimated $0.0063). It is restored as the default and the saved live workspace model. The earlier timeout observations below are historical.
 - Supplied Gemini key loaded only in the server. Account model discovery succeeded. `gemini-3.8-flash` is listed but repeatedly timed out in direct and Pi generation checks; it is not silently selected or substituted.
 - Explicit `gemini-3-flash-preview` passed native Pi→inspect_board→Stockfish analyse_position→coaching response. Synthetic logs were deleted after checking the native session tree.
 - `node scripts/check-live.mjs` passed an actual HTTP SAN move, real Stockfish reply, real paid Pi coach response, idempotent replay, independent daily coaching meeting/acceptance protocol, native JSONL and restart recovery in a disposable archive. The meeting left the main game unchanged. Model costs are estimates; the most recent move turn was approximately $0.0054, separate from meeting calls.

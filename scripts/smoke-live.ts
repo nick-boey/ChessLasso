@@ -6,7 +6,7 @@ import { Chess } from 'chess.js';
 import { CoachRuntime } from '../server/coach.js';
 
 const provider = process.env.CHESSLASSO_PROVIDER === 'fireworks' ? 'fireworks' : 'google';
-const model = process.env.CHESSLASSO_MODEL ?? 'gemini-3-flash-preview';
+const model = process.env.CHESSLASSO_MODEL ?? 'gemini-3.8-flash';
 const directory = await mkdtemp(join(tmpdir(), 'chesslasso-live-check-'));
 const context = { fen: new Chess().fen(), pgn: '', version: 0 };
 const runtime = new CoachRuntime({
