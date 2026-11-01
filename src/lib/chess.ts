@@ -50,6 +50,32 @@ export function loadGame(pgn: string): Chess {
   return chess;
 }
 
+export function gameTimeline(pgn: string) {
+  const board = loadGame(pgn);
+  const history = board.history({ verbose: true });
+  return [
+    {
+      label: 'Starting position',
+      fen: history[0]?.before ?? board.fen(),
+      lastMove: null as [string, string] | null,
+    },
+    ...history.map((move) => ({
+      label: `${move.before.split(' ')[5]}${move.color === 'w' ? '.' : '...'} ${move.san}`,
+      fen: move.after,
+      lastMove: [move.from, move.to] as [string, string],
+    })),
+  ];
+}
+
+export function gameAtPly(pgn: string, ply: number) {
+  const board = loadGame(pgn);
+  const length = board.history().length;
+  if (!Number.isSafeInteger(ply) || ply < 0 || ply > length)
+    throw new Error('Choose a move from the current game.');
+  for (let index = length; index > ply; index--) board.undo();
+  return snapshot(board);
+}
+
 export function playNotation(chess: Chess, raw: string) {
   const input = raw.trim().replace(/^0-0(-0)?(?=[+#]?$)/, (text) => text.replaceAll('0', 'O'));
   if (!input || input.length > 16 || /^[a-h][1-8][a-h][1-8]/.test(input)) {

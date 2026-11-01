@@ -120,13 +120,15 @@ export function createApp(
       !body.message.trim() ||
       body.message.length > 4000 ||
       typeof body.version !== 'number' ||
-      typeof body.commandId !== 'string'
+      typeof body.commandId !== 'string' ||
+      (body.reviewPly !== undefined &&
+        (!Number.isSafeInteger(body.reviewPly) || body.reviewPly < 0))
     )
       return c.json(
         { error: 'Enter a message of up to4,000 characters with a current position version.' },
         400,
       );
-    return c.json(await runtime.chat(body.message, body.version, body.commandId));
+    return c.json(await runtime.chat(body.message, body.version, body.commandId, body.reviewPly));
   });
   app.post('/api/answer', async (c) => {
     const body = await c.req.json();
@@ -193,7 +195,11 @@ export function createApp(
       body.clientId.length > 100 ||
       typeof body.seq !== 'number' ||
       typeof body.visible !== 'boolean' ||
-      typeof body.focused !== 'boolean'
+      typeof body.focused !== 'boolean' ||
+      (body.reviewPly !== undefined &&
+        (!Number.isSafeInteger(body.reviewPly) ||
+          body.reviewPly < 0 ||
+          body.reviewPly > runtime.store.workspace().game.moves.length))
     )
       return c.json({ error: 'Invalid presence observation.' }, 400);
     const previous = runtime.store.get<{
@@ -201,6 +207,7 @@ export function createApp(
       seq: number;
       visible: boolean;
       focused: boolean;
+      reviewPly?: number;
     }>('presence:' + body.clientId);
     const now = Date.now();
     if (previous && body.seq <= previous.seq) return c.json({ ok: true });
@@ -210,6 +217,7 @@ export function createApp(
       seq: body.seq,
       visible: body.visible,
       focused: body.focused,
+      reviewPly: body.reviewPly,
     });
     runtime.store.put('last-presence', now);
     const lease = runtime.store.get<{ clientId: string; until: number }>('control-lease');
@@ -221,11 +229,25 @@ export function createApp(
       seq: body.seq,
       visible: body.visible,
       focused: body.focused,
+      reviewPly: body.reviewPly,
+      version: runtime.store.workspace().version,
       observedExposureMs:
         control &&
         !runtime.store.workspace().paused &&
         previous?.visible &&
         previous.focused &&
+        previous.reviewPly === undefined &&
+        body.reviewPly === undefined &&
+        now - previous.at <= 20000
+          ? duration
+          : 0,
+      reviewExposureMs:
+        control &&
+        !runtime.store.workspace().paused &&
+        previous?.visible &&
+        previous.focused &&
+        previous.reviewPly !== undefined &&
+        previous.reviewPly === body.reviewPly &&
         now - previous.at <= 20000
           ? duration
           : 0,

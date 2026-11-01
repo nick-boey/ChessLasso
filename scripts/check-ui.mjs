@@ -100,6 +100,62 @@ try {
   await page.getByRole('button', { name: 'Flip board', exact: true }).click();
   passed.push('Keyboard move validated on server, legal reply played and orientation toggles');
 
+  const gameMoves = page.getByRole('navigation', { name: 'Game moves', exact: true });
+  const liveState = await stored();
+  const boardDescription = async () => {
+    const id = await page.locator('.board-frame .chess-board').getAttribute('aria-describedby');
+    return page.locator('#' + id).innerText();
+  };
+  const liveDescription = await boardDescription();
+  assert.equal(await gameMoves.locator('.move-button').count(), 8);
+  assert.equal(
+    await gameMoves.locator('.move-button[aria-current="step"]').innerText(),
+    '4... Nf6',
+  );
+  await gameMoves.getByRole('button', { name: '1. e4', exact: true }).click();
+  assert.match(
+    await page.locator('.board-frame .chess-board').getAttribute('aria-label'),
+    /Reviewing 1\. e4/,
+  );
+  assert.equal(await gameMoves.locator('.move-button.selected').innerText(), '1. e4');
+  assert.match(await boardDescription(), /White pawn on e4/);
+  assert.equal(await move.isDisabled(), true);
+  await gameMoves.getByRole('button', { name: 'Previous move', exact: true }).click();
+  assert.equal(
+    await gameMoves.getByRole('button', { name: 'Previous move', exact: true }).isDisabled(),
+    true,
+  );
+  assert.match(await boardDescription(), /White pawn on e2/);
+  assert.equal(
+    await gameMoves
+      .getByRole('button', { name: 'Go to start', exact: true })
+      .getAttribute('aria-current'),
+    'step',
+  );
+  await gameMoves.getByRole('button', { name: 'Next move', exact: true }).click();
+  const reviewRequest = page.waitForRequest(
+    (request) => request.url().endsWith('/api/coach') && request.method() === 'POST',
+  );
+  await send('Why did this pawn advance?');
+  assert.equal((await reviewRequest).postDataJSON().reviewPly, 1);
+  assert.equal(
+    (await stored()).conversations.at(-1).messages.at(-1).fen,
+    new Chess().move('e4').after,
+  );
+  assert.equal(await move.isDisabled(), true);
+  assert.equal(await pgn(), liveState.game.pgn);
+  assert.equal((await stored()).version, liveState.version);
+  await gameMoves.getByRole('button', { name: 'Go to latest move', exact: true }).click();
+  assert.equal(await boardDescription(), liveDescription);
+  assert.equal(await move.isDisabled(), false);
+  assert.equal(
+    await gameMoves.getByRole('button', { name: 'Next move', exact: true }).isDisabled(),
+    true,
+  );
+  passed.push(
+    'Move buttons highlight the viewed position; previous/next/start/latest preserve live play and review chat context',
+  );
+
   const previousConversation = await page.locator('.move-conversation').last().innerText();
   assert.equal(await page.locator('.move-conversation').count(), 2);
   await move.fill('O-O');
@@ -261,6 +317,11 @@ try {
   await send('Set up an endgame');
   assert.match(await pgn(), /\[SetUp "1"\]/);
   assert.equal(await page.locator('.activity-heading h1').innerText(), 'Activate your king');
+  assert.equal(await gameMoves.locator('.move-button').count(), 0);
+  assert.equal(
+    await gameMoves.getByRole('button', { name: 'Next move', exact: true }).isDisabled(),
+    true,
+  );
   await send('Start a new game');
   assert.equal((await stored()).quiet, true);
   await page.getByRole('button', { name: 'Resume coaching', exact: true }).click();
@@ -317,6 +378,50 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: `${output}/mobile.png`, fullPage: true });
   passed.push('Responsive layout has no horizontal overflow at 320, 390, 760, 1024 and 1440px');
+
+  const navigationPage = await context.newPage();
+  navigationPage.on('pageerror', (error) => errors.push(error.message));
+  const longGame = new Chess();
+  for (let repeat = 0; repeat < 30; repeat++)
+    for (const san of ['Nf3', 'Nf6', 'Ng1', 'Ng8']) longGame.move(san);
+  await navigationPage.route('**/api/state', async (route) => {
+    const response = await route.fetch();
+    const state = await response.json();
+    state.game = {
+      ...state.game,
+      fen: longGame.fen(),
+      pgn: longGame.pgn(),
+      moves: longGame.history(),
+      over: true,
+    };
+    state.gameId = 'long-history';
+    await route.fulfill({ response, json: state });
+  });
+  await navigationPage.goto(baseURL);
+  await navigationPage.locator('.move-button[data-ply="120"]').waitFor();
+  await navigationPage.getByRole('button', { name: 'Go to start', exact: true }).click();
+  await navigationPage.getByRole('button', { name: 'Go to latest move', exact: true }).click();
+  await navigationPage.waitForFunction(() => {
+    const list = document.querySelector('.move-list').getBoundingClientRect();
+    const selected = document
+      .querySelector('.move-button[aria-current="step"]')
+      .getBoundingClientRect();
+    return selected.top >= list.top && selected.bottom <= list.bottom;
+  });
+  for (const width of [320, 390, 1440]) {
+    await navigationPage.setViewportSize({ width, height: 1000 });
+    assert.ok(
+      await navigationPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    );
+  }
+  await navigationPage.locator('.move-button[data-ply="1"]').click();
+  await navigationPage.screenshot({ path: `${output}/history-desktop.png`, fullPage: true });
+  await navigationPage.setViewportSize({ width: 390, height: 844 });
+  await navigationPage.screenshot({ path: `${output}/history-mobile.png`, fullPage: true });
+  await navigationPage.close();
+  passed.push(
+    'Long move lists scroll to the selected move and fit desktop/mobile without horizontal overflow',
+  );
   assert.deepEqual(errors, []);
   await writeFile(
     `${output}/checks.json`,

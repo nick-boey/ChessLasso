@@ -9,6 +9,7 @@
     practiceGame,
     validBudget,
     playNotation,
+    gameTimeline,
   } from './lib/chess';
   import type { Budget, GameState, Demonstration } from './lib/chess';
   import coach from '../config/mock-coach.json';
@@ -47,6 +48,34 @@
   let messageId = 0;
   let page = $state<Page>('today');
   let game = $state(practiceGame());
+  let reviewPly = $state<number | null>(null);
+  let currentGameId = '';
+  const timeline = $derived(gameTimeline(game.pgn));
+  const displayedPly = $derived(reviewPly ?? timeline.length - 1);
+  const displayedPosition = $derived(timeline[displayedPly]);
+  let moveList = $state<HTMLDivElement>();
+  $effect(() => {
+    const ply = displayedPly;
+    if (moveList) {
+      void tick().then(() => {
+        const selected = moveList?.querySelector<HTMLElement>(
+          `[data-ply="${ply}"]`,
+        );
+        if (selected && moveList)
+          moveList.scrollTo({
+            top:
+              moveList.scrollTop +
+              selected.getBoundingClientRect().top -
+              moveList.getBoundingClientRect().top -
+              4,
+          });
+      });
+    }
+  });
+  function navigateGame(ply: number) {
+    reviewPly = ply >= timeline.length - 1 ? null : Math.max(0, ply);
+    void presence();
+  }
   let notation = $state('');
   let chat = $state('');
 
@@ -167,6 +196,10 @@
 
   function restore(saved: any) {
     if (ready && saved.version < version) return;
+    if (saved.gameId !== currentGameId) {
+      currentGameId = saved.gameId;
+      reviewPly = null;
+    }
     if (saved.playerSide !== playerSide) {
       playerSide = saved.playerSide;
       flipped = playerSide === 'b';
@@ -229,6 +262,7 @@
         focused: document.hasFocus(),
         version,
         monotonicMs: performance.now(),
+        reviewPly: reviewPly ?? undefined,
       });
       hasControl = result.control;
     } catch {
@@ -305,7 +339,15 @@
 
   async function play(event: SubmitEvent) {
     event.preventDefault();
-    if (!ready || busy || thinking || game.over || paused || !hasControl)
+    if (
+      !ready ||
+      busy ||
+      thinking ||
+      game.over ||
+      paused ||
+      !hasControl ||
+      reviewPly !== null
+    )
       return;
     error = '';
     // Validate before any request so a rejected entry never changes the board.
@@ -373,6 +415,7 @@
       >('/api/coach', {
         message: text,
         fen: game.fen,
+        reviewPly: reviewPly ?? undefined,
         version,
         commandId: crypto.randomUUID(),
       });
@@ -549,25 +592,80 @@
         </div>
         <div class="board-frame">
           <Board
-            fen={game.fen}
+            fen={displayedPosition.fen}
             {flipped}
-            lastMove={game.lastMove}
-            label={`Main chessboard. ${game.status}. Enter moves in the field below.`}
+            lastMove={displayedPosition.lastMove}
+            label={reviewPly === null
+              ? `Main chessboard. ${game.status}. Enter moves in the field below.`
+              : `Main chessboard. Reviewing ${displayedPosition.label}.`}
           />
         </div>
+        <nav class="game-history" aria-label="Game moves">
+          <div class="history-controls">
+            <button
+              class="icon-button"
+              class:selected={displayedPly === 0}
+              aria-label="Go to start"
+              title="Go to start"
+              aria-current={displayedPly === 0 ? 'step' : undefined}
+              disabled={!ready || busy || thinking || displayedPly === 0}
+              onclick={() => navigateGame(0)}
+              ><Icon name="first" size={18} /></button
+            >
+            <button
+              class="icon-button"
+              aria-label="Previous move"
+              title="Previous move"
+              disabled={!ready || busy || thinking || displayedPly === 0}
+              onclick={() => navigateGame(displayedPly - 1)}
+              ><Icon name="previous" size={18} /></button
+            >
+            <button
+              class="icon-button"
+              aria-label="Next move"
+              title="Next move"
+              disabled={!ready || busy || thinking || reviewPly === null}
+              onclick={() => navigateGame(displayedPly + 1)}
+              ><Icon name="chevron" size={18} /></button
+            >
+            <button
+              class="icon-button"
+              aria-label="Go to latest move"
+              title="Go to latest move"
+              disabled={!ready || busy || thinking || reviewPly === null}
+              onclick={() => navigateGame(timeline.length - 1)}
+              ><Icon name="last" size={18} /></button
+            >
+          </div>
+          <div class="move-list" bind:this={moveList}>
+            {#each timeline.slice(1) as position, index}
+              <button
+                class="move-button"
+                class:selected={displayedPly === index + 1}
+                data-ply={index + 1}
+                aria-current={displayedPly === index + 1 ? 'step' : undefined}
+                disabled={!ready || busy || thinking}
+                onclick={() => navigateGame(index + 1)}>{position.label}</button
+              >
+            {/each}
+          </div>
+        </nav>
         <form class="move-form" onsubmit={play}>
           <label class="sr-only" for="move">Your move</label>
           <input
             id="move"
             bind:this={moveInput}
             bind:value={notation}
-            placeholder="Nc3"
+            placeholder={reviewPly === null
+              ? 'Nc3'
+              : 'Return to latest move to play'}
             autocomplete="off"
             autocapitalize="off"
             spellcheck="false"
             aria-invalid={!!error}
             aria-describedby={error ? 'move-error' : undefined}
             disabled={!hasControl ||
+              reviewPly !== null ||
               !ready ||
               busy ||
               thinking ||
@@ -580,6 +678,7 @@
             aria-label={busy ? 'Playing move' : 'Play move'}
             title="Play move"
             disabled={!hasControl ||
+              reviewPly !== null ||
               !ready ||
               busy ||
               thinking ||
@@ -701,7 +800,9 @@
             ><textarea
               id="chat"
               bind:value={chat}
-              placeholder="Message coach…"
+              placeholder={reviewPly === null
+                ? 'Message coach…'
+                : `Ask about ${displayedPosition.label}…`}
               rows="2"
               maxlength="4000"
               onkeydown={(event) => {

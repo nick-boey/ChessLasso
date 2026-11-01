@@ -6,6 +6,7 @@ import {
   loadGame,
   playNotation,
   snapshot,
+  gameAtPly,
   playMockOpponent,
   type Demonstration,
 } from '../src/lib/chess.js';
@@ -256,25 +257,39 @@ export class Runtime {
       role as CoachRole,
     );
   }
-  async chat(message: string, version: number, id: string) {
+  async chat(message: string, version: number, id: string, reviewPly?: number) {
     message = redactCoachText(message);
     return this.serial(async () => {
       const previous = this.store.command(id);
       if (previous) return previous;
       let workspace = this.store.workspace();
       if (version !== workspace.version) throw new ConflictError();
+      const reviewed =
+        reviewPly === undefined ? undefined : gameAtPly(workspace.game.pgn, reviewPly);
       const conversation = workspace.conversations.at(-1)!;
       const messageId =
         Math.max(
           0,
           ...workspace.conversations.flatMap((item) => item.messages.map((msg) => msg.id)),
         ) + 1;
-      conversation.messages.push({ id: messageId, role: 'player', text: message });
+      conversation.messages.push({
+        id: messageId,
+        role: 'player',
+        text: message,
+        fen: reviewed?.fen,
+      });
       this.store.save(workspace);
       let result: Record<string, unknown>;
-      if (workspace.mode === 'live') result = { ...(await this.paid(message, workspace)) };
-      else result = this.mock(message);
-      await this.reply();
+      if (workspace.mode === 'live')
+        result = {
+          ...(await this.paid(
+            message,
+            reviewed ? { ...workspace, game: reviewed } : workspace,
+            reviewed ? 'question-feedback' : 'coach',
+          )),
+        };
+      else result = reviewed ? { text: fixture.default } : this.mock(message);
+      if (!reviewed) await this.reply();
       workspace = this.store.workspace();
       if (Array.isArray(result.actions))
         for (const action of result.actions as { name: string; args: Record<string, unknown> }[]) {
@@ -316,10 +331,10 @@ export class Runtime {
           role: 'coach',
           text,
           action: result.action as string,
-          fen: result.fen as string,
+          fen: reviewed?.fen ?? (result.fen as string),
           demonstration: result.demonstration as Demonstration | undefined,
         });
-      this.save(workspace, 'chat', { version: workspace.version, message, reply: text });
+      this.save(workspace, 'chat', { version: workspace.version, message, reply: text, reviewPly });
       if (text)
         this.store.event('assistance', {
           version: workspace.version,

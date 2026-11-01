@@ -9,6 +9,8 @@ import {
   validBudget,
   snapshot,
   NotationError,
+  gameTimeline,
+  gameAtPly,
 } from '../src/lib/chess.js';
 import { createApp } from '../server/app.js';
 import { Runtime } from '../server/runtime.js';
@@ -54,6 +56,27 @@ void test('PGN retains setup and history; mock opponent makes legal moves', () =
   const ending = new Chess('8/7k/8/8/8/4K3/4P3/8 w - - 0 1');
   playNotation(ending, 'Kd3');
   assert.equal(loadGame(ending.pgn()).fen(), ending.fen());
+});
+
+void test('game navigation preserves full history and handles custom black-to-move starts', () => {
+  const game = practiceGame();
+  const timeline = gameTimeline(game.pgn);
+  assert.equal(timeline.length, 7);
+  assert.equal(timeline[1].label, '1. e4');
+  assert.equal(timeline[2].label, '1... e5');
+  assert.deepEqual(timeline[1].lastMove, ['e2', 'e4']);
+  for (let ply = 0; ply < timeline.length; ply++)
+    assert.equal(gameAtPly(game.pgn, ply).fen, timeline[ply].fen);
+  assert.equal(gameAtPly(game.pgn, 6).pgn, game.pgn);
+  for (const ply of [-1, 7, 0.5, NaN]) assert.throws(() => gameAtPly(game.pgn, ply));
+  const board = new Chess('8/7k/8/8/8/4K3/4P3/8 b - - 0 23');
+  const start = board.fen();
+  board.move('Kh6');
+  const custom = gameTimeline(board.pgn());
+  assert.equal(custom[0].fen, start);
+  assert.equal(custom[1].label, '23... Kh6');
+  assert.equal(gameAtPly(board.pgn(), 0).fen, start);
+  assert.equal(gameTimeline(new Chess(start).pgn()).length, 1);
 });
 
 void test('budgets accept no cap, warning and hard limits and reject invalid amounts', () => {

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Runtime } from '../server/runtime.js';
 import { Store } from '../server/store.js';
 import { createApp } from '../server/app.js';
+import { gameAtPly } from '../src/lib/chess.js';
 function runtime() {
   return new Runtime(mkdtempSync(join(tmpdir(), 'lasso-runtime-')));
 }
@@ -211,6 +212,87 @@ void test('question answers are server validated, durable, idempotent and leave 
   );
   await assert.rejects(app.answer(before.game.fen, 'e2e4', 'invalid'));
   assert.ok(app.store.events().some((event) => event.kind === 'question_answer'));
+  app.store.close();
+});
+
+void test('historical chat uses the selected current-game position without changing play', async () => {
+  const app = runtime();
+  const before = app.store.workspace();
+  const result = await app.chat('Set up an endgame', before.version, 'review', 2);
+  assert.equal(app.store.workspace().game.pgn, before.game.pgn);
+  assert.equal(app.store.workspace().gameId, before.gameId);
+  assert.equal(app.store.workspace().version, before.version);
+  assert.equal(
+    app.store.workspace().conversations.at(-1)!.messages.at(-1)!.fen,
+    gameAtPly(before.game.pgn, 2).fen,
+  );
+  assert.deepEqual(await app.chat('Set up an endgame', before.version, 'review', 2), result);
+  await assert.rejects(app.chat('Invalid position', before.version, 'invalid-review', 99));
+  const live = app.store.workspace();
+  live.mode = 'live';
+  app.store.save(live);
+  app.paid = async (_message, context, role) => {
+    assert.equal(role, 'question-feedback');
+    assert.equal(context.game.fen, gameAtPly(before.game.pgn, 1).fen);
+    assert.equal(context.game.moves.length, 1);
+    return {
+      text: 'Review feedback',
+      actions: [],
+      usage: { input: 0, output: 0, cost: 0 },
+      sessionId: 'review-test',
+    };
+  };
+  await app.chat('Why this move?', before.version, 'live-review', 1);
+  assert.equal(app.store.workspace().game.pgn, before.game.pgn);
+  const web = createApp(app, { authentication: false });
+  const response = await web.request('/api/coach', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'Question',
+      version: before.version,
+      commandId: 'bad-review',
+      reviewPly: -1,
+    }),
+  });
+  assert.equal(response.status, 400);
+  app.store.close();
+});
+
+void test('history review exposure is recorded separately from live-position exposure', async () => {
+  const app = runtime();
+  const web = createApp(app, { authentication: false });
+  const observe = async (reviewPly?: number) => {
+    app.store.put('presence:review-device', {
+      at: Date.now() - 1000,
+      seq: 1,
+      visible: true,
+      focused: true,
+      reviewPly,
+    });
+    const response = await web.request('/api/presence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: 'review-device',
+        seq: 2,
+        visible: true,
+        focused: true,
+        reviewPly,
+      }),
+    });
+    assert.equal(response.status, 200);
+    return app.store
+      .events()
+      .filter((event) => event.kind === 'presence')
+      .at(-1)!.value as { observedExposureMs: number; reviewExposureMs: number };
+  };
+  const reviewing = await observe(1);
+  assert.equal(reviewing.observedExposureMs, 0);
+  assert.ok(reviewing.reviewExposureMs >= 1000);
+  const live = await observe();
+  assert.ok(live.observedExposureMs >= 1000);
+  assert.equal(live.reviewExposureMs, 0);
   app.store.close();
 });
 

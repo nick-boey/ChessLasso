@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-01T19:42:42.771345+00:00",
+  "generatedAt": "2026-11-01T20:45:56.194605+00:00",
   "title": "Design System: ChessLasso",
   "extensions": {
     "colorMeta": {
@@ -357,6 +357,10 @@
       "message-code": {
         "displayName": "Message code",
         "purpose": "Inline notation and fenced blocks in ui-monospace at .95em/600."
+      },
+      "history-label": {
+        "displayName": "History move",
+        "purpose": "12px/650 tabular SAN labels with move numbers in the current-game history."
       }
     },
     "shadows": [
@@ -478,6 +482,14 @@
       "description": "Imported brown checker inside the nearly square wood frame; pieces remain Chessground/Cburnett in the app.",
       "html": "<div class=\"ds-board-frame\"><svg class=\"ds-board\" viewBox=\"0 0 8 8\" role=\"img\" aria-label=\"Chessboard material sample\"><defs><pattern id=\"ds-checker\" width=\"2\" height=\"2\" patternUnits=\"userSpaceOnUse\"><rect width=\"2\" height=\"2\" fill=\"#f0d9b5\"/><path d=\"M1 0h1v1H1zM0 1h1v1H0z\" fill=\"#000\" opacity=\".2\"/></pattern></defs><rect width=\"8\" height=\"8\" fill=\"url(#ds-checker)\"/></svg></div>",
       "css": ".ds-board-frame{padding:4px;background:#d6bd99;border-radius:5px;max-width:410px}.ds-board{display:block;width:100%;aspect-ratio:1;shape-rendering:crispEdges}@media(width < 760px){.ds-board-frame{padding:4px}}"
+    },
+    {
+      "name": "Current-game history",
+      "kind": "nav",
+      "refersTo": "game-history",
+      "description": "First/previous/next/latest controls and selected SAN move buttons below the board. Review preserves the live game.",
+      "html": "<nav class=\"ds-history\" aria-label=\"Game moves\"><div class=\"ds-history-controls\"><button class=\"ds-history-icon\" aria-label=\"Go to start\" title=\"Go to start\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 5v14m13-14-7 7 7 7\"/></svg></button><button class=\"ds-history-icon\" aria-label=\"Previous move\" title=\"Previous move\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m15 5-7 7 7 7\"/></svg></button><button class=\"ds-history-icon\" aria-label=\"Next move\" title=\"Next move\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"m9 5 7 7-7 7\"/></svg></button><button class=\"ds-history-icon\" aria-label=\"Go to latest move\" title=\"Go to latest move\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M19 5v14M6 5l7 7-7 7\"/></svg></button></div><div class=\"ds-move-list\"><button class=\"ds-move ds-selected\" aria-current=\"step\">1. Nf3</button><button class=\"ds-move\">1... Nf6</button><button class=\"ds-move\">2. Ng1</button><button class=\"ds-move\">2... Ng8</button></div></nav>",
+      "css": ".ds-history{font-family:'Manrope Variable',sans-serif;display:flex;align-items:start;gap:8px;margin-top:8px;padding:4px;background:var(--paper,#fff);border:1px solid var(--line,#dce4e4);border-radius:6px}.ds-history-controls{display:grid;grid-template-columns:repeat(2,32px);flex:none}.ds-history-icon{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:6px;padding:0;background:transparent;color:var(--muted,#576a70);cursor:pointer}.ds-history-icon:hover{background:#e8efed}.ds-move-list{display:flex;flex-wrap:wrap;gap:4px;min-width:0;max-height:100px;overflow-y:auto;position:relative;padding:4px}.ds-move{font-family:'Manrope Variable',sans-serif;font-size:12px;font-weight:650;line-height:1.65;font-variant-numeric:tabular-nums;padding:5px 7px;min-height:28px;border:0;border-radius:5px;background:transparent;color:var(--muted,#576a70);cursor:pointer;white-space:nowrap}.ds-history .ds-selected{background:var(--green,#286352);color:var(--paper,#fff)}.ds-move:not(.ds-selected):hover{background:var(--soft,#e9efed)}.ds-history button:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-history button:disabled{opacity:.5;cursor:default}@media(width < 760px){.ds-history-controls{grid-template-columns:repeat(2,44px)}.ds-history-icon{width:44px;height:44px}.ds-move{min-height:44px}.ds-move-list{max-height:148px}}"
     }
   ],
   "narrative": {
@@ -512,6 +524,7 @@
       "Do use green for available actions, coaching identity and current state.",
       "Do preserve keyboard focus, visible or accessible labels and reduced-motion behavior.",
       "Do keep move validation, icon-based notation help and rejected input close to entry.",
+      "Do keep the selected history move visible and clearly marked, preserve the live game during review, and require Latest before playing.",
       "Do attach follow-ups to their position and reveal each new player or coach message from its beginning.",
       "Do preserve semantic Markdown structure with compact message typography, wrapping code and readable tables.",
       "Do disclose scripted coaching and illustrative data in functional copy.",
@@ -519,7 +532,7 @@
     ],
     "donts": [
       "Don't add promotional copy, motivational filler or website-style introductions; task headings and subtitles are lesson content.",
-      "Don't reintroduce opponent metadata, manual New game, a board toolbar, move ledger or individual-game download controls into the practice workspace.",
+      "Don't reintroduce opponent metadata, manual New game or individual-game download controls into the practice workspace.",
       "Don't give ordinary paper panels dialog shadows.",
       "Don't replace algebraic move entry with interactive board movement.",
       "Don't let demonstration steps replace or alter the player's game board.",

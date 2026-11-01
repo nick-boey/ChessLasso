@@ -86,6 +86,11 @@ typography:
     fontSize: '13px'
     fontWeight: 650
     lineHeight: 1.65
+  history-label:
+    fontFamily: 'Manrope Variable, sans-serif'
+    fontSize: '12px'
+    fontWeight: 650
+    lineHeight: 1.65
   metadata:
     fontFamily: 'Manrope Variable, sans-serif'
     fontSize: '10px'
@@ -138,6 +143,24 @@ components:
     rounded: '{rounded.icon}'
     width: '40px'
     height: '40px'
+  game-history:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.icon}'
+    padding: '4px'
+  history-control:
+    textColor: '{colors.muted}'
+    rounded: '{rounded.icon}'
+    width: '32px'
+    height: '32px'
+  history-move:
+    textColor: '{colors.muted}'
+    typography: '{typography.history-label}'
+    rounded: '{rounded.board}'
+    padding: '5px 7px'
+  history-move-selected:
+    backgroundColor: '{colors.green}'
+    textColor: '{colors.paper}'
   move-entry:
     textColor: '{colors.ink}'
     height: '40px'
@@ -197,7 +220,7 @@ The palette combines cool work surfaces with warm board materials; the frontmatt
 
 ### Primary
 
-- **Study Green** (`green`): primary actions, selected navigation, coaching links and author labels.
+- **Study Green** (`green`): primary actions, selected navigation and history moves, coaching links and author labels.
 - **Deep Study Green** (`green-hover`): enabled primary-button hover.
 - **Focus Green** (`focus`): visible keyboard outlines.
 
@@ -238,17 +261,17 @@ Errors use `error` with `error-surface` in the notation guide. Imported Chessgro
 - **Label:** the label token serves controls and move-entry labels. Navigation has its own slightly larger, lighter token.
 - **Metadata:** the metadata token supports authors and compact state. Minor disclosures range from 9–11px; these are supporting copy, not primary instructions.
 
-Position-context labels and session numbers use tabular numerals. Mobile candidate inputs and the conversation textarea increase to 16px; the main move field keeps the base 14px size. Keep labels sentence case and concrete.
+Position-context labels, current-game move buttons and session numbers use tabular numerals. History labels use the history-label role. Mobile candidate inputs and the conversation textarea increase to 16px; the main move field keeps the base 14px size. Keep labels sentence case and concrete.
 
 **The Functional Copy Rule.** Coach-controlled task headings and subtitles describe the current activity. Keep controls, state, disclosures and coaching content specific; do not add promotional copy, motivational filler or website-style introductions.
 
 ## Layout
 
-The desktop header is 56px tall. The centered main container has a maximum width of 1160px and padding of 12px 16px. The board/conversation grid uses `minmax(0, 1.1fr) minmax(340px, 1fr)` with a 16px gap. A compact task heading and subtitle sit above the square board, with Flip aligned alongside. A single input/play/notation row follows 8px below the board. Opponent metadata, manual New game, board toolbar, move ledger and individual-game download controls are absent from this workspace.
+The desktop header is 56px tall. The centered main container has a maximum width of 1160px and padding of 12px 16px. The board/conversation grid uses `minmax(0, 1.1fr) minmax(340px, 1fr)` with a 16px gap. A compact task heading and subtitle sit above the square board, with Flip aligned alongside. A compact current-game history panel follows 8px below the board, then a single input/play/notation row follows 8px below history. Opponent metadata, manual New game and individual-game download controls are absent from this workspace.
 
 The coach panel stretches alongside the board, capped at 840px, with a scrolling transcript and bottom composer. Its header uses 10px 12px padding, the transcript uses 8px 12px with a 160px minimum height, and composer controls use 8px 10px padding. Message spacing is 10px. Position sections use 4px top and 12px bottom padding; a hairline context label precedes each group. The newest section occupies at least the transcript's full height so its instructions can align at the top.
 
-Below 1080px the practice grid gap becomes 24px and the coach minimum column is 320px; the header's prototype tag hides. Below 760px the header wraps navigation onto a 38px full-width row and hides the profile avatar. Both practice and reading layouts become a single column with 16px gaps and 12px main gutters. The order is task, board, move entry, coach. The coach panel has a 360px minimum and 560px maximum height. The move row's play and notation targets grow from 40px columns to 44px square controls. The 1500px media rule preserves the 12px main top padding.
+Below 1080px the practice grid gap becomes 24px and the coach minimum column is 320px; the header's prototype tag hides. Below 760px the header wraps navigation onto a 38px full-width row and hides the profile avatar. Both practice and reading layouts become a single column with 16px gaps and 12px main gutters. The order is task, board, current-game history, move entry, coach. The coach panel has a 360px minimum and 560px maximum height. The move row's play and notation targets grow from 40px columns to 44px square controls. The 1500px media rule preserves the 12px main top padding.
 
 Reading surfaces retain a `1.65fr / minmax(280px, 1fr)` desktop grid with a 16px gap and 20px paper padding, reducing to 16px padding on mobile. Spacing remains compact and functional, with component-specific optical values rather than a fabricated uniform scale.
 
@@ -277,6 +300,14 @@ Keyboard focus uses a 3px Focus Green outline offset by 4px. The composer instea
 ### Navigation
 
 Board, Progress and Journal are functional buttons. The active item uses Study Green and a 3px bottom indicator, plus `aria-current="page"`. The header remains visible in the document flow; on mobile its navigation occupies a second full-width row. There is no separate promotional header.
+
+### Current-game history
+
+A flat White Paper panel sits directly below the main board, with a Paper Hairline border, 6px corners, 4px padding and an 8px gap between navigation and moves. First, Previous, Next and Latest use named inline SVG icons in a two-column grid of 32px square controls. Their disabled state marks the beginning/end or an unavailable action. They grow to 44px squares below 760px, with the established keyboard focus outline.
+
+The wrapping SAN move buttons use tabular 12px labels, 5px corners, 5px 7px padding and a 28px minimum height, increasing to 44px on mobile. The selected move uses Study Green and White Paper plus `aria-current="step"`; the starting-position control uses the same selected treatment when appropriate. Unselected moves receive Soft Paper on hover. The list uses 4px gaps and padding, with vertical scrolling beyond 100px on desktop or 148px on mobile. Selection scrolls its button into view.
+
+Navigation shows the position and last-move highlight after the selected ply without changing the live game. Each move label includes its move number and SAN, and the timeline supports a nonstandard starting position. While reviewing, algebraic entry and Play are disabled and the field says “Return to latest move to play”. Latest restores live entry. The chat placeholder identifies the reviewed move, and coaching requests carry that reviewed position. A new game resets review to its latest position. History remains local to the current game.
 
 ### Quick actions and disclosures
 
@@ -308,6 +339,7 @@ Chessground supplies the brown checker and Cburnett pieces. Boards are view-only
 - **Do** use green for available actions, coaching identity and current state.
 - **Do** preserve keyboard focus, visible or accessible labels and reduced-motion behavior.
 - **Do** keep move validation, icon-based notation help and rejected input close to entry.
+- **Do** keep the selected history move visible and clearly marked, preserve the live game during review, and require Latest before playing.
 - **Do** attach follow-ups to their position and reveal each new player or coach message from its beginning.
 - **Do** preserve semantic Markdown structure with compact message typography, wrapping code and readable tables.
 - **Do** disclose scripted coaching and illustrative data in functional copy.
@@ -316,7 +348,7 @@ Chessground supplies the brown checker and Cburnett pieces. Boards are view-only
 ### Don't:
 
 - **Don't** add promotional copy, motivational filler or website-style introductions; task headings and subtitles are lesson content.
-- **Don't** reintroduce opponent metadata, manual New game, a board toolbar, move ledger or individual-game download controls into the practice workspace.
+- **Don't** reintroduce opponent metadata, manual New game or individual-game download controls into the practice workspace.
 - **Don't** give ordinary paper panels dialog shadows.
 - **Don't** replace algebraic move entry with interactive board movement.
 - **Don't** let demonstration steps replace or alter the player's game board.

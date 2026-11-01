@@ -10,6 +10,9 @@
       | 'flip'
       | 'settings'
       | 'chevron'
+      | 'previous'
+      | 'first'
+      | 'last'
       | 'spark'
       | 'play'
       | 'check';
@@ -22,6 +25,9 @@
     flip: 'M4 8h14l-4-4m6 12H6l4 4M4 8v5m16 3v-5',
     settings: 'M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6M10 15v6',
     chevron: 'm9 5 7 7-7 7',
+    previous: 'm15 5-7 7 7 7',
+    first: 'M5 5v14m13-14-7 7 7 7',
+    last: 'M19 5v14M6 5l7 7-7 7',
     spark: 'm12 3 2.6 6.4L21 12l-6.4 2.6L12 21l-2.6-6.4L3 12l6.4-2.6Z',
     play: 'm8 4 12 8-12 8Z',
     check: 'm5 12 4 4L19 6',
