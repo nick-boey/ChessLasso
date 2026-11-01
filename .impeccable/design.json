@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-01T12:26:47.414532+00:00",
+  "title": "Design System: ChessLasso",
+  "extensions": {
+    "colorMeta": {
+      "green": {
+        "role": "primary",
+        "displayName": "Green",
+        "canonical": "#286352",
+        "tonalRamp": [
+          "oklch(15% 0.0679 171.52)",
+          "oklch(26% 0.0679 171.52)",
+          "oklch(38% 0.0679 171.52)",
+          "oklch(49% 0.0679 171.52)",
+          "oklch(61% 0.0679 171.52)",
+          "oklch(72% 0.0679 171.52)",
+          "oklch(84% 0.0679 171.52)",
+          "oklch(95% 0.0679 171.52)"
+        ]
+      },
+      "green-hover": {
+        "role": "primary",
+        "displayName": "Green Hover",
+        "canonical": "#1a4e3f",
+        "tonalRamp": [
+          "oklch(15% 0.0611 170.84)",
+          "oklch(26% 0.0611 170.84)",
+          "oklch(38% 0.0611 170.84)",
+          "oklch(49% 0.0611 170.84)",
+          "oklch(61% 0.0611 170.84)",
+          "oklch(72% 0.0611 170.84)",
+          "oklch(84% 0.0611 170.84)",
+          "oklch(95% 0.0611 170.84)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "Focus",
+        "canonical": "#2d735e",
+        "tonalRamp": [
+          "oklch(15% 0.0783 170.39)",
+          "oklch(26% 0.0783 170.39)",
+          "oklch(38% 0.0783 170.39)",
+          "oklch(49% 0.0783 170.39)",
+          "oklch(61% 0.0783 170.39)",
+          "oklch(72% 0.0783 170.39)",
+          "oklch(84% 0.0783 170.39)",
+          "oklch(95% 0.0783 170.39)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#243d44",
+        "tonalRamp": [
+          "oklch(15% 0.0332 217.46)",
+          "oklch(26% 0.0332 217.46)",
+          "oklch(38% 0.0332 217.46)",
+          "oklch(49% 0.0332 217.46)",
+          "oklch(61% 0.0332 217.46)",
+          "oklch(72% 0.0332 217.46)",
+          "oklch(84% 0.0332 217.46)",
+          "oklch(95% 0.0332 217.46)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#576a70",
+        "tonalRamp": [
+          "oklch(15% 0.0247 218.90)",
+          "oklch(26% 0.0247 218.90)",
+          "oklch(38% 0.0247 218.90)",
+          "oklch(49% 0.0247 218.90)",
+          "oklch(61% 0.0247 218.90)",
+          "oklch(72% 0.0247 218.90)",
+          "oklch(84% 0.0247 218.90)",
+          "oklch(95% 0.0247 218.90)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "canonical": "#f1f4f4",
+        "tonalRamp": [
+          "oklch(15% 0.0032 197.10)",
+          "oklch(26% 0.0032 197.10)",
+          "oklch(38% 0.0032 197.10)",
+          "oklch(49% 0.0032 197.10)",
+          "oklch(61% 0.0032 197.10)",
+          "oklch(72% 0.0032 197.10)",
+          "oklch(84% 0.0032 197.10)",
+          "oklch(95% 0.0032 197.10)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#fff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Line",
+        "canonical": "#dce4e4",
+        "tonalRamp": [
+          "oklch(15% 0.0086 197.01)",
+          "oklch(26% 0.0086 197.01)",
+          "oklch(38% 0.0086 197.01)",
+          "oklch(49% 0.0086 197.01)",
+          "oklch(61% 0.0086 197.01)",
+          "oklch(72% 0.0086 197.01)",
+          "oklch(84% 0.0086 197.01)",
+          "oklch(95% 0.0086 197.01)"
+        ]
+      },
+      "field-line": {
+        "role": "neutral",
+        "displayName": "Field Line",
+        "canonical": "#c7d3d2",
+        "tonalRamp": [
+          "oklch(15% 0.0131 190.91)",
+          "oklch(26% 0.0131 190.91)",
+          "oklch(38% 0.0131 190.91)",
+          "oklch(49% 0.0131 190.91)",
+          "oklch(61% 0.0131 190.91)",
+          "oklch(72% 0.0131 190.91)",
+          "oklch(84% 0.0131 190.91)",
+          "oklch(95% 0.0131 190.91)"
+        ]
+      },
+      "placeholder": {
+        "role": "neutral",
+        "displayName": "Placeholder",
+        "canonical": "#64767a",
+        "tonalRamp": [
+          "oklch(15% 0.0222 212.63)",
+          "oklch(26% 0.0222 212.63)",
+          "oklch(38% 0.0222 212.63)",
+          "oklch(49% 0.0222 212.63)",
+          "oklch(61% 0.0222 212.63)",
+          "oklch(72% 0.0222 212.63)",
+          "oklch(84% 0.0222 212.63)",
+          "oklch(95% 0.0222 212.63)"
+        ]
+      },
+      "player-message": {
+        "role": "neutral",
+        "displayName": "Player Message",
+        "canonical": "#f0f4f3",
+        "tonalRamp": [
+          "oklch(15% 0.0044 179.73)",
+          "oklch(26% 0.0044 179.73)",
+          "oklch(38% 0.0044 179.73)",
+          "oklch(49% 0.0044 179.73)",
+          "oklch(61% 0.0044 179.73)",
+          "oklch(72% 0.0044 179.73)",
+          "oklch(84% 0.0044 179.73)",
+          "oklch(95% 0.0044 179.73)"
+        ]
+      },
+      "board-frame": {
+        "role": "secondary",
+        "displayName": "Board Frame",
+        "canonical": "#d6bd99",
+        "tonalRamp": [
+          "oklch(15% 0.0561 76.80)",
+          "oklch(26% 0.0561 76.80)",
+          "oklch(38% 0.0561 76.80)",
+          "oklch(49% 0.0561 76.80)",
+          "oklch(61% 0.0561 76.80)",
+          "oklch(72% 0.0561 76.80)",
+          "oklch(84% 0.0561 76.80)",
+          "oklch(95% 0.0561 76.80)"
+        ]
+      },
+      "board-light": {
+        "role": "secondary",
+        "displayName": "Board Light",
+        "canonical": "#f0d9b5",
+        "tonalRamp": [
+          "oklch(15% 0.0538 78.98)",
+          "oklch(26% 0.0538 78.98)",
+          "oklch(38% 0.0538 78.98)",
+          "oklch(49% 0.0538 78.98)",
+          "oklch(61% 0.0538 78.98)",
+          "oklch(72% 0.0538 78.98)",
+          "oklch(84% 0.0538 78.98)",
+          "oklch(95% 0.0538 78.98)"
+        ]
+      },
+      "board-dark": {
+        "role": "secondary",
+        "displayName": "Board Dark",
+        "canonical": "#c0ae91",
+        "tonalRamp": [
+          "oklch(15% 0.0449 79.69)",
+          "oklch(26% 0.0449 79.69)",
+          "oklch(38% 0.0449 79.69)",
+          "oklch(49% 0.0449 79.69)",
+          "oklch(61% 0.0449 79.69)",
+          "oklch(72% 0.0449 79.69)",
+          "oklch(84% 0.0449 79.69)",
+          "oklch(95% 0.0449 79.69)"
+        ]
+      },
+      "error": {
+        "role": "neutral",
+        "displayName": "Error",
+        "canonical": "#973e27",
+        "tonalRamp": [
+          "oklch(15% 0.1253 35.55)",
+          "oklch(26% 0.1253 35.55)",
+          "oklch(38% 0.1253 35.55)",
+          "oklch(49% 0.1253 35.55)",
+          "oklch(61% 0.1253 35.55)",
+          "oklch(72% 0.1253 35.55)",
+          "oklch(84% 0.1253 35.55)",
+          "oklch(95% 0.1253 35.55)"
+        ]
+      },
+      "error-surface": {
+        "role": "neutral",
+        "displayName": "Error Surface",
+        "canonical": "#f9ede6",
+        "tonalRamp": [
+          "oklch(15% 0.0161 52.56)",
+          "oklch(26% 0.0161 52.56)",
+          "oklch(38% 0.0161 52.56)",
+          "oklch(49% 0.0161 52.56)",
+          "oklch(61% 0.0161 52.56)",
+          "oklch(72% 0.0161 52.56)",
+          "oklch(84% 0.0161 52.56)",
+          "oklch(95% 0.0161 52.56)"
+        ]
+      },
+      "backdrop": {
+        "role": "neutral",
+        "displayName": "Backdrop",
+        "canonical": "#16323bc2",
+        "tonalRamp": [
+          "oklch(15% 0.0375 221.28)",
+          "oklch(26% 0.0375 221.28)",
+          "oklch(38% 0.0375 221.28)",
+          "oklch(49% 0.0375 221.28)",
+          "oklch(61% 0.0375 221.28)",
+          "oklch(72% 0.0375 221.28)",
+          "oklch(84% 0.0375 221.28)",
+          "oklch(95% 0.0375 221.28)"
+        ]
+      },
+      "prototype-surface": {
+        "role": "neutral",
+        "displayName": "Prototype Surface",
+        "canonical": "#edf2e7",
+        "tonalRamp": [
+          "oklch(15% 0.0155 126.82)",
+          "oklch(26% 0.0155 126.82)",
+          "oklch(38% 0.0155 126.82)",
+          "oklch(49% 0.0155 126.82)",
+          "oklch(61% 0.0155 126.82)",
+          "oklch(72% 0.0155 126.82)",
+          "oklch(84% 0.0155 126.82)",
+          "oklch(95% 0.0155 126.82)"
+        ]
+      },
+      "prototype-ink": {
+        "role": "neutral",
+        "displayName": "Prototype Ink",
+        "canonical": "#435431",
+        "tonalRamp": [
+          "oklch(15% 0.0588 129.70)",
+          "oklch(26% 0.0588 129.70)",
+          "oklch(38% 0.0588 129.70)",
+          "oklch(49% 0.0588 129.70)",
+          "oklch(61% 0.0588 129.70)",
+          "oklch(72% 0.0588 129.70)",
+          "oklch(84% 0.0588 129.70)",
+          "oklch(95% 0.0588 129.70)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "Compact header wordmark."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Functional reading-section heading."
+      },
+      "dialog-title": {
+        "displayName": "Dialog title",
+        "purpose": "Functional modal heading."
+      },
+      "section-title": {
+        "displayName": "Section title",
+        "purpose": "Reading-surface subheading."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base UI and reading copy."
+      },
+      "conversation": {
+        "displayName": "Conversation",
+        "purpose": "Compact 13px coaching text with 1.6 line height."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Controls and move-entry labels."
+      },
+      "navigation": {
+        "displayName": "Navigation",
+        "purpose": "Main workspace destinations."
+      },
+      "metadata": {
+        "displayName": "Metadata",
+        "purpose": "Supporting details and compact state."
+      },
+      "activity-title": {
+        "displayName": "Task heading",
+        "purpose": "Dynamic coach-controlled lesson title; 15px desktop, current 25px mobile rule."
+      },
+      "activity-subtitle": {
+        "displayName": "Task subtitle",
+        "purpose": "Compact dynamic instruction for the current activity."
+      }
+    },
+    "shadows": [
+      {
+        "name": "dialog-ambient",
+        "value": "0 16px 60px #152e3b26",
+        "purpose": "Native dialogs only; resting workspace panels remain flat."
+      }
+    ],
+    "motion": [
+      {
+        "name": "dialog-arrive",
+        "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Translate from 8px / opacity .8 to rest / opacity 1. Disabled for reduced motion."
+      },
+      {
+        "name": "piece-animation",
+        "value": "180ms",
+        "purpose": "Chessground piece updates; disabled for reduced motion at mount."
+      },
+      {
+        "name": "position-scroll",
+        "value": "smooth / instant",
+        "purpose": "Scroll new position instructions to the transcript top; instant for reduced motion, with mobile coach-panel reveal."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide",
+        "value": "1500px"
+      },
+      {
+        "name": "compact",
+        "value": "1080px"
+      },
+      {
+        "name": "stacked",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Advance a demonstration or save preferences.",
+      "html": "<button class=\"ds-primary\">Next step</button>",
+      "css": ".ds-primary{font-family:'Manrope Variable',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:10px;border-radius:7px;padding:11px 17px;font-size:12px;font-weight:750;min-height:44px;cursor:pointer;border:0;background:var(--green,#286352);color:var(--paper,#fff)}.ds-primary:not(:disabled):hover{background:#1a4e3f}.ds-primary:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-primary:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Move back through a demonstration or return to the board.",
+      "html": "<button class=\"ds-secondary\">Previous</button>",
+      "css": ".ds-secondary{font-family:'Manrope Variable',sans-serif;display:inline-flex;align-items:center;justify-content:center;gap:10px;border-radius:7px;padding:11px 17px;font-size:12px;font-weight:750;min-height:44px;cursor:pointer;background:var(--paper,#fff);color:var(--ink,#243d44);border:1px solid #c8d5d2}.ds-secondary:not(:disabled):hover{background:#eaf0ec}.ds-secondary:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-secondary:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Icon action",
+      "kind": "button",
+      "refersTo": "button-icon",
+      "description": "Compact named board or header utility.",
+      "html": "<button class=\"ds-icon\" aria-label=\"Close dialog\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6 6 18\"/></svg></button>",
+      "css": ".ds-icon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:0;border-radius:6px;background:transparent;color:var(--ink,#243d44);cursor:pointer}.ds-icon:hover{background:#e8efed}.ds-icon:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}"
+    },
+    {
+      "name": "Compact move entry",
+      "kind": "custom",
+      "refersTo": "move-entry",
+      "description": "One algebraic input with named play and notation icons; 44px mobile actions.",
+      "html": "<form class=\"ds-move-row\"><label class=\"ds-sr\" for=\"ds-notation\">Your move</label><input id=\"ds-notation\" placeholder=\"Nc3\" autocomplete=\"off\" spellcheck=\"false\"><button class=\"ds-play\" aria-label=\"Play move\" title=\"Play move\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"m8 5 11 7-11 7z\"/></svg></button><button class=\"ds-guide\" type=\"button\" aria-label=\"Notation guide\" title=\"Notation guide\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" aria-hidden=\"true\"><path d=\"M12 5v15M12 5C9 3 5 3 3 4v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-2-1-6-1-9 1Z\"/></svg></button></form>",
+      "css": ".ds-move-row{display:grid;grid-template-columns:minmax(0,1fr) 40px 40px;gap:4px;align-items:center;margin-top:8px}.ds-move-row input{font-family:'Manrope Variable',sans-serif;font-size:14px;line-height:1.65;min-width:0;height:40px;padding:7px 10px;border:1px solid #c7d3d2;border-radius:7px;background:var(--paper,#fff);color:var(--ink,#243d44);caret-color:var(--green,#286352)}.ds-move-row input::placeholder{color:#64767a;opacity:1}.ds-play,.ds-guide{display:grid;place-items:center;width:40px;height:40px;border:0;border-radius:6px;cursor:pointer}.ds-play{background:var(--green,#286352);color:var(--paper,#fff)}.ds-play:not(:disabled):hover{background:#1a4e3f}.ds-guide{width:38px;height:38px;background:transparent;color:var(--ink,#243d44)}.ds-guide:hover{background:#e8efed}.ds-move-row :focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-play:disabled{opacity:.5;cursor:default}.ds-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);border:0;white-space:nowrap}@media(width < 760px){.ds-move-row{grid-template-columns:minmax(0,1fr) 44px 44px}.ds-move-row input,.ds-play,.ds-guide{height:44px}.ds-play,.ds-guide{width:44px}}"
+    },
+    {
+      "name": "Candidate move field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Visible-label algebraic field used in a position question.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-candidate\">Your candidate move</label><input class=\"ds-input\" id=\"ds-candidate\" placeholder=\"e.g. Nc3\" autocomplete=\"off\" spellcheck=\"false\">",
+      "css": ".ds-field-label{font-family:'Manrope Variable',sans-serif;display:block;font-size:12px;font-weight:750;margin-bottom:9px;color:var(--ink,#243d44)}.ds-input{font-family:'Manrope Variable',sans-serif;font-size:14px;line-height:1.65;min-height:45px;border:1px solid #c7d3d2;border-radius:7px;background:var(--paper,#fff);color:var(--ink,#243d44);padding:12px 14px;caret-color:var(--green,#286352)}.ds-input::placeholder{color:#64767a;opacity:1}.ds-input:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-input:disabled{background:#f0f3f2}@media(width < 760px){.ds-input{font-size:16px;padding-inline:11px}}"
+    },
+    {
+      "name": "Workspace navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Functional navigation with an active-page underline.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main navigation\"><button aria-current=\"page\">Board</button><button>Progress</button><button>Journal</button></nav>",
+      "css": ".ds-nav{display:flex;gap:29px;height:56px}.ds-nav button{font-family:'Manrope Variable',sans-serif;position:relative;padding:0;border:0;background:transparent;color:var(--muted,#576a70);font-size:13px;font-weight:650;cursor:pointer}.ds-nav button[aria-current]{color:var(--green,#286352)}.ds-nav button[aria-current]::after{content:\"\";position:absolute;bottom:0;left:0;right:0;height:3px;border-radius:3px 3px 0 0;background:var(--green,#286352)}.ds-nav button:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}@media(width < 760px){.ds-nav{height:38px;gap:28px}.ds-nav button{font-size:11px}}"
+    },
+    {
+      "name": "Coaching quick action",
+      "kind": "chip",
+      "refersTo": "quick-action",
+      "description": "Request one specific coaching interaction.",
+      "html": "<button class=\"ds-quick\">Hint</button>",
+      "css": ".ds-quick{font-family:'Manrope Variable',sans-serif;background:transparent;border:1px solid #d9e3df;border-radius:5px;padding:6px 9px;font-size:10px;color:#466157;cursor:pointer}.ds-quick:hover{background:#f0f5f1}.ds-quick:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-quick:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Prototype disclosure",
+      "kind": "chip",
+      "refersTo": "prototype-tag",
+      "description": "Noninteractive disclosure of the artifact status.",
+      "html": "<span class=\"ds-prototype\">Interactive prototype</span>",
+      "css": ".ds-prototype{font-family:'Manrope Variable',sans-serif;display:inline-block;font-size:10px;padding:4px 9px;background:#edf2e7;color:#435431;border-radius:4px;white-space:nowrap;font-weight:650}"
+    },
+    {
+      "name": "Position-scoped coach paper",
+      "kind": "card",
+      "refersTo": "coach-panel",
+      "description": "Compact flat paper with one context heading per position.",
+      "html": "<section class=\"ds-coach\" aria-label=\"Chat with your coach\"><h2>Coach</h2><section class=\"ds-position\" aria-label=\"Position after 4. Nc3 Nf6\"><div class=\"ds-context\">4. Nc3 Nf6</div><div class=\"ds-message\"><strong>Coach</strong><p>What did Nf6 change? Check threats, open lines, and undefended pieces.</p></div></section></section>",
+      "css": ".ds-coach{font-family:'Manrope Variable',sans-serif;color:var(--ink,#243d44);background:var(--paper,#fff);border:1px solid var(--line,#dce4e4);border-radius:12px;overflow:clip}.ds-coach h2{font-size:13px;font-weight:700;letter-spacing:-.02em;line-height:1.4;margin:0;padding:10px 12px}.ds-position{padding:12px 12px 20px}.ds-context{font-size:11px;color:var(--muted,#576a70);font-variant-numeric:tabular-nums;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line,#dce4e4)}.ds-message{margin-bottom:10px}.ds-message strong{display:block;font-size:10px;font-weight:800;color:var(--green,#286352);margin-bottom:3px}.ds-message p{margin:0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}"
+    },
+    {
+      "name": "Board material",
+      "kind": "custom",
+      "refersTo": "board-frame",
+      "description": "Imported brown checker inside the nearly square wood frame; pieces remain Chessground/Cburnett in the app.",
+      "html": "<div class=\"ds-board-frame\"><svg class=\"ds-board\" viewBox=\"0 0 8 8\" role=\"img\" aria-label=\"Chessboard material sample\"><defs><pattern id=\"ds-checker\" width=\"2\" height=\"2\" patternUnits=\"userSpaceOnUse\"><rect width=\"2\" height=\"2\" fill=\"#f0d9b5\"/><path d=\"M1 0h1v1H1zM0 1h1v1H0z\" fill=\"#000\" opacity=\".2\"/></pattern></defs><rect width=\"8\" height=\"8\" fill=\"url(#ds-checker)\"/></svg></div>",
+      "css": ".ds-board-frame{padding:4px;background:#d6bd99;border-radius:5px;max-width:410px}.ds-board{display:block;width:100%;aspect-ratio:1;shape-rendering:crispEdges}@media(width < 760px){.ds-board-frame{padding:4px}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Personal Study Room",
+    "overview": "A tournament scoresheet and a conversation share one quiet workspace. Blue-grey surroundings, white work surfaces, deep petrol ink and muted wood leave the board as the largest visual object. Restrained green marks available actions and current state. The first viewport begins with application controls, a compact coach-controlled task heading and subtitle, and the board. Task copy changes with the lesson; it is working content rather than a promotional introduction.\n\nThe interface uses self-hosted Manrope, hairline borders and precise, compact spacing. Styling is ordinary CSS in reset, base, layout and component layers, with imported Chessground board and Cburnett piece styles; there is no styling framework. Functional labels and actual coaching content carry the voice. Prototype and scripted-coach disclosures stay visible where they explain the product's limits.",
+    "keyCharacteristics": [
+      "Board and coach remain the primary working surfaces.",
+      "Flat paper panels, petrol text and restrained green actions.",
+      "Position-scoped conversation sections keep instructions and follow-ups attached to each move.",
+      "Examples use a separate board in a native dialog.",
+      "Responsive stacking preserves the move-entry workflow."
+    ],
+    "rules": [
+      {
+        "name": "The State Green Rule",
+        "body": "Green signals actions, coaching identity or current state; it does not decorate large background fields.",
+        "section": "colors"
+      },
+      {
+        "name": "The Functional Copy Rule",
+        "body": "Coach-controlled task headings and subtitles describe the current activity. Keep controls, state, disclosures and coaching content specific; do not add promotional copy, motivational filler or website-style introductions.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Workspace Rule",
+        "body": "Reserve ambient elevation and a scrim for dialogs; ordinary panels use borders and tone.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the coach-set task, board, compact move entry and position-scoped coach feed as the primary workspace.",
+      "Do use green for available actions, coaching identity and current state.",
+      "Do preserve keyboard focus, visible or accessible labels and reduced-motion behavior.",
+      "Do keep move validation, icon-based notation help and rejected input close to entry.",
+      "Do attach follow-ups to their position and reveal new instructions after accepted moves.",
+      "Do disclose scripted coaching and illustrative data in functional copy.",
+      "Do use the existing plain CSS layers and imported Chessground material."
+    ],
+    "donts": [
+      "Don't add promotional copy, motivational filler or website-style introductions; task headings and subtitles are lesson content.",
+      "Don't reintroduce opponent metadata, manual New game, a board toolbar, move ledger or individual-game download controls into the practice workspace.",
+      "Don't give ordinary paper panels dialog shadows.",
+      "Don't replace algebraic move entry with interactive board movement.",
+      "Don't let demonstration steps replace or alter the player's game board.",
+      "Don't introduce a styling framework or a second visual vocabulary for new screens."
+    ]
+  }
+}

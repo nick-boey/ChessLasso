@@ -1,0 +1,60 @@
+{
+  "activities": {
+    "development": {
+      "heading": "Development & king safety",
+      "subtitle": "Improve a piece, then consider Black’s reply."
+    },
+    "endgame": {
+      "heading": "Activate your king",
+      "subtitle": "Find a route to the centre without losing the pawn."
+    },
+    "observation": {
+      "heading": "Find your own plan",
+      "subtitle": "Choose your moves. I’ll observe until you ask for help."
+    },
+    "calculation": {
+      "heading": "Compare candidate moves",
+      "subtitle": "Name two moves and calculate one reply to each."
+    }
+  },
+  "welcome": "What’s your plan in this position? Choose a candidate move and consider Black’s reply.",
+  "default": "Name a candidate move and your expected reply. You can check the move on a separate board.",
+  "hint": "Look at your undeveloped pieces and your king. Which move would help one of them? Try forming a plan before calculating a long line.",
+  "quiet": "I’ll hold notes until you ask for help.",
+  "resume": "What move are you considering?",
+  "example": "This example covers development and castling. Your game is unchanged.",
+  "newGame": "I’ll observe until you ask for help.",
+  "position": "White to move. How would you use your king in this endgame?",
+  "afterMove": [
+    "After {reply}, which of your pieces needs attention? Name a candidate move before calculating.",
+    "What did {reply} change? Check threats, open lines, and undefended pieces.",
+    "Consider your reply to {reply}. What is your opponent’s strongest response to your candidate?"
+  ],
+  "reflection": "What were you trying to achieve with that move? A short explanation helps me distinguish your plan from the result.",
+  "feedback": "Feedback noted in this conversation. Prompt editing is not connected in this prototype.",
+  "demonstration": {
+    "title": "Bring your pieces into the game",
+    "steps": [
+      {
+        "moves": [],
+        "title": "Start with the centre",
+        "note": "Before moving, find your king and your undeveloped pieces. A useful opening plan usually helps both."
+      },
+      {
+        "moves": ["e4", "e5"],
+        "title": "Make room",
+        "note": "1. e4 e5 opens lines for the bishops and queen. The pawn moves also contest central squares."
+      },
+      {
+        "moves": ["e4", "e5", "Nf3", "Nc6"],
+        "title": "Develop with a purpose",
+        "note": "2. Nf3 attacks the e5 pawn. Black develops a knight to defend it. Each move has a concrete job."
+      },
+      {
+        "moves": ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "O-O"],
+        "title": "Get the king safe",
+        "note": "3. Bc4 Bc5 4. O-O. Castling moves the king away from the centre and brings the rook closer to the game. O-O is kingside castling."
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "ignorePatterns": [
+    "package-lock.json",
+    "dist/**",
+    "node_modules/**",
+    "output/**",
+    ".impeccable/**",
+    ".playwright-cli/**",
+    "LICENSE"
+  ]
+}
