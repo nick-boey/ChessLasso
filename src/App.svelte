@@ -3,6 +3,7 @@
   import { Chess } from 'chess.js';
   import Board from './lib/Board.svelte';
   import Icon from './lib/Icon.svelte';
+  import Markdown from './lib/Markdown.svelte';
   import {
     loadGame,
     practiceGame,
@@ -64,7 +65,7 @@
   let mode = $state<'mock' | 'live'>('mock');
   let playerSide = $state('w');
   let provider = $state('google');
-  let model = $state('gemini-3-flash-preview');
+  let model = $state('gemini-3.8-flash');
   let paused = $state(false);
   let hasControl = $state(true);
   let profile = $state('Baseline not assessed.');
@@ -115,17 +116,37 @@
     return board.fen();
   });
 
-  async function showCurrentConversation() {
+  let lastShownMessage = '';
+  $effect(() => {
+    const conversation = conversations.at(-1);
+    const key = `${conversation?.id}:${conversation?.messages.at(-1)?.id}`;
+    if (ready && page === 'today' && transcript && key !== lastShownMessage) {
+      lastShownMessage = key;
+      void showLatestMessage();
+    }
+  });
+
+  async function showLatestMessage() {
     await tick();
-    const current = transcript?.querySelector<HTMLElement>(
+    const conversation = transcript?.querySelector<HTMLElement>(
       '.move-conversation:last-child',
     );
+    const current =
+      conversation?.querySelector<HTMLElement>('.message:last-child') ??
+      conversation;
     const behavior = window.matchMedia('(prefers-reduced-motion: reduce)')
       .matches
       ? 'instant'
       : 'smooth';
     if (current && transcript)
-      transcript.scrollTo({ top: current.offsetTop - 8, behavior });
+      transcript.scrollTo({
+        top:
+          transcript.scrollTop +
+          current.getBoundingClientRect().top -
+          transcript.getBoundingClientRect().top -
+          8,
+        behavior,
+      });
     if (window.innerWidth < 760)
       coachPanel?.scrollIntoView({ block: 'nearest', behavior });
   }
@@ -326,7 +347,6 @@
       notation = '';
 
       if (!quiet) record('coaching_note', result.note);
-      await showCurrentConversation();
     } catch (reason) {
       error = (reason as Error).message;
     } finally {
@@ -369,7 +389,6 @@
     } finally {
       thinking = false;
       await tick();
-      await showCurrentConversation();
     }
   }
 
@@ -618,7 +637,7 @@
                   <span class="message-author"
                     >{message.role === 'coach' ? 'Coach' : 'You'}</span
                   >
-                  <p>{message.text}</p>
+                  <Markdown text={message.text} />
                   {#if message.action === 'demonstrate'}<button
                       class="example-link"
                       onclick={() => {

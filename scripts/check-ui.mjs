@@ -110,8 +110,10 @@ try {
   assert.ok(await page.locator('.move-conversation').last().locator('.message').count());
   await page.waitForFunction(() => {
     const feed = document.querySelector('.transcript').getBoundingClientRect();
-    const current = document.querySelector('.move-conversation:last-child').getBoundingClientRect();
-    return Math.abs(current.top - feed.top) < 20;
+    const current = document
+      .querySelector('.move-conversation:last-child .message:last-child')
+      .getBoundingClientRect();
+    return current.top >= feed.top && current.bottom <= feed.bottom;
   });
   played = await pgn();
   passed.push(
@@ -144,6 +146,97 @@ try {
   await page.keyboard.press('Escape');
   assert.equal(await pgn(), played);
   passed.push('Board question validates a candidate without modifying the game');
+
+  const markdown = [
+    '### Candidate moves',
+    '**Develop** a piece, *then* compare `Nf3` and ~~h4~~.',
+    '1. Check threats.\n2. Compare candidates.\n   - Keep the king safe.',
+    '> Look for forcing moves.',
+    '[Reference](https://example.com/chess) [Unsafe](javascript:alert%281%29)',
+    '![Tracking image](https://example.com/pixel.png)',
+    '<script>window.markdownExecuted = true</script><img src="x" onerror="window.markdownExecuted = true"><svg onload="window.markdownExecuted = true"></svg><a href="data:text/html,unsafe">Unsafe data</a>',
+    '| Move | Idea |\n| --- | --- |\n| Nf3 | Develop |',
+    '```text\n' + 'Nf3 '.repeat(120) + '\n```',
+    ...Array.from(
+      { length: 12 },
+      (_, index) => `Consideration ${index + 1}: compare the resulting position before committing.`,
+    ),
+  ].join('\n\n');
+  let releaseReply;
+  const replyGate = new Promise((resolve) => (releaseReply = resolve));
+  let requestStarted;
+  const requestGate = new Promise((resolve) => (requestStarted = resolve));
+  await page.route('**/api/coach', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.text = markdown;
+    body.workspace.conversations.at(-1).messages.at(-1).text = markdown;
+    requestStarted();
+    await replyGate;
+    await route.fulfill({ response, json: body });
+  });
+  const pendingReply = send('Compare **Nf3** with *h4*.');
+  await requestGate;
+  await page.waitForFunction(() => {
+    const feed = document.querySelector('.transcript').getBoundingClientRect();
+    const current = document
+      .querySelector('.message.from-player:last-child')
+      ?.getBoundingClientRect();
+    return current && current.top >= feed.top && current.bottom <= feed.bottom;
+  });
+  assert.equal(
+    await page.locator('.message.from-player').last().locator('strong').innerText(),
+    'Nf3',
+  );
+  releaseReply();
+  await pendingReply;
+  await page.unroute('**/api/coach');
+  const formatted = page.locator('.message').last().locator('.message-content');
+  assert.equal(await formatted.locator('h3').innerText(), 'Candidate moves');
+  assert.equal(await formatted.locator('strong').innerText(), 'Develop');
+  assert.equal(await formatted.locator('em').innerText(), 'then');
+  assert.equal(await formatted.locator('del').innerText(), 'h4');
+  assert.equal(await formatted.locator('ol > li').count(), 2);
+  assert.equal(await formatted.locator('ul > li').count(), 1);
+  assert.equal(await formatted.locator('blockquote').innerText(), 'Look for forcing moves.');
+  assert.equal(await formatted.locator('table tbody td').count(), 2);
+  assert.equal(await formatted.locator('pre code').count(), 1);
+  assert.equal(
+    await formatted.getByRole('link', { name: 'Reference' }).getAttribute('href'),
+    'https://example.com/chess',
+  );
+  assert.equal(
+    await formatted
+      .locator('script, img, svg, [onerror], [onload], a[href^="javascript:"], a[href^="data:"]')
+      .count(),
+    0,
+  );
+  assert.equal(await page.evaluate(() => window.markdownExecuted), undefined);
+  await page.waitForFunction(() => {
+    const feed = document.querySelector('.transcript').getBoundingClientRect();
+    const current = document
+      .querySelector('.move-conversation:last-child .message:last-child')
+      .getBoundingClientRect();
+    return Math.abs(current.top - feed.top - 8) < 2;
+  });
+  await page.screenshot({ path: `${output}/markdown-desktop.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.ok(await formatted.evaluate((element) => element.scrollWidth <= element.clientWidth));
+  await page.screenshot({ path: `${output}/markdown-mobile.png`, fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await send('What should I consider next?');
+  await page.waitForFunction(() => {
+    const feed = document.querySelector('.transcript').getBoundingClientRect();
+    const current = document
+      .querySelector('.move-conversation:last-child .message:last-child')
+      .getBoundingClientRect();
+    return current.top >= feed.top && current.bottom <= feed.bottom;
+  });
+  passed.push('Chat Markdown formats both roles, sanitizes unsafe content and fits mobile');
+  passed.push(
+    'Each sent message and coach reply scrolls into view, including long replies within one move',
+  );
 
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   await page.getByLabel('Monthly model budget').selectOption('hard');

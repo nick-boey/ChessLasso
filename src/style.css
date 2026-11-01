@@ -393,10 +393,73 @@
     color: var(--green);
     margin-bottom: 3px;
   }
-  .message p {
+  .message-content {
     font-size: 13px;
     line-height: 1.6;
     overflow-wrap: anywhere;
+  }
+  .message-content > * {
+    margin-block: 0 8px;
+  }
+  .message-content > :last-child {
+    margin-bottom: 0;
+  }
+  .message-content :is(h1, h2, h3, h4, h5, h6) {
+    font-size: 1em;
+    font-weight: 800;
+    line-height: 1.5;
+    letter-spacing: normal;
+    text-wrap: wrap;
+  }
+  .message-content :is(ul, ol) {
+    padding-inline-start: 20px;
+  }
+  .message-content li + li {
+    margin-top: 3px;
+  }
+  .message-content li > p {
+    margin-block: 4px;
+  }
+  .message-content blockquote {
+    margin-inline: 0;
+    padding-inline-start: 10px;
+    border-inline-start: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .message-content code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.95em;
+    background: var(--soft);
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: break-spaces;
+  }
+  .message-content pre {
+    padding: 8px;
+    background: var(--soft);
+    border-radius: 5px;
+    white-space: pre-wrap;
+  }
+  .message-content pre code {
+    padding: 0;
+  }
+  .message-content a[href] {
+    color: var(--green);
+    text-decoration: underline;
+  }
+  .message-content table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+  .message-content :is(th, td) {
+    border: 1px solid var(--line);
+    padding: 4px 6px;
+    text-align: start;
+  }
+  .message-content hr {
+    border: 0;
+    border-top: 1px solid var(--line);
   }
   .message.from-player {
     margin-left: 10px;

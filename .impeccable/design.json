@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-01T12:26:47.414532+00:00",
+  "generatedAt": "2026-11-01T19:42:42.771345+00:00",
   "title": "Design System: ChessLasso",
   "extensions": {
     "colorMeta": {
@@ -288,6 +288,21 @@
           "oklch(84% 0.0588 129.70)",
           "oklch(95% 0.0588 129.70)"
         ]
+      },
+      "soft": {
+        "role": "neutral",
+        "displayName": "Soft Paper",
+        "canonical": "#e9efed",
+        "tonalRamp": [
+          "oklch(15% 0.0069 174.37)",
+          "oklch(26% 0.0069 174.37)",
+          "oklch(38% 0.0069 174.37)",
+          "oklch(49% 0.0069 174.37)",
+          "oklch(61% 0.0069 174.37)",
+          "oklch(72% 0.0069 174.37)",
+          "oklch(84% 0.0069 174.37)",
+          "oklch(95% 0.0069 174.37)"
+        ]
       }
     },
     "typographyMeta": {
@@ -334,6 +349,14 @@
       "activity-subtitle": {
         "displayName": "Task subtitle",
         "purpose": "Compact dynamic instruction for the current activity."
+      },
+      "message-heading": {
+        "displayName": "Message heading",
+        "purpose": "All semantic Markdown heading levels, compact at 13px/800 with 1.5 line height."
+      },
+      "message-code": {
+        "displayName": "Message code",
+        "purpose": "Inline notation and fenced blocks in ui-monospace at .95em/600."
       }
     },
     "shadows": [
@@ -355,9 +378,9 @@
         "purpose": "Chessground piece updates; disabled for reduced motion at mount."
       },
       {
-        "name": "position-scroll",
+        "name": "message-scroll",
         "value": "smooth / instant",
-        "purpose": "Scroll new position instructions to the transcript top; instant for reduced motion, with mobile coach-panel reveal."
+        "purpose": "Each new player or coach message targets its beginning; empty new sections target position context. Long replies remain readable from the top. Instant for reduced motion; mobile reveals the coach panel."
       }
     ],
     "breakpoints": [
@@ -444,9 +467,9 @@
       "name": "Position-scoped coach paper",
       "kind": "card",
       "refersTo": "coach-panel",
-      "description": "Compact flat paper with one context heading per position.",
-      "html": "<section class=\"ds-coach\" aria-label=\"Chat with your coach\"><h2>Coach</h2><section class=\"ds-position\" aria-label=\"Position after 4. Nc3 Nf6\"><div class=\"ds-context\">4. Nc3 Nf6</div><div class=\"ds-message\"><strong>Coach</strong><p>What did Nf6 change? Check threats, open lines, and undefended pieces.</p></div></section></section>",
-      "css": ".ds-coach{font-family:'Manrope Variable',sans-serif;color:var(--ink,#243d44);background:var(--paper,#fff);border:1px solid var(--line,#dce4e4);border-radius:12px;overflow:clip}.ds-coach h2{font-size:13px;font-weight:700;letter-spacing:-.02em;line-height:1.4;margin:0;padding:10px 12px}.ds-position{padding:12px 12px 20px}.ds-context{font-size:11px;color:var(--muted,#576a70);font-variant-numeric:tabular-nums;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line,#dce4e4)}.ds-message{margin-bottom:10px}.ds-message strong{display:block;font-size:10px;font-weight:800;color:var(--green,#286352);margin-bottom:3px}.ds-message p{margin:0;font-size:13px;line-height:1.6;overflow-wrap:anywhere}"
+      "description": "Position-scoped coach paper with compact semantic Markdown content.",
+      "html": "<section class=\"ds-coach\" aria-label=\"Chat with your coach\"><h2>Coach</h2><section class=\"ds-position\" aria-label=\"Position after 4. Nc3 Nf6\"><div class=\"ds-context\">4. Nc3 Nf6</div><div class=\"ds-message\"><strong class=\"ds-author\">Coach</strong><div class=\"ds-message-content\"><h3>Candidate moves</h3><p><strong>Develop</strong> a piece, then compare <code>Nf3</code>.</p><ol><li>Check threats.</li><li>Compare candidates.<ul><li>Keep the king safe.</li></ul></li></ol><blockquote><p>Look for forcing moves.</p></blockquote><p><a href=\"https://lichess.org/learn\">Reference</a></p><table><thead><tr><th>Move</th><th>Idea</th></tr></thead><tbody><tr><td>Nf3</td><td>Develop</td></tr></tbody></table><pre><code>1. Nf3 Nc6</code></pre></div></div></section></section>",
+      "css": ".ds-coach{font-family:'Manrope Variable',sans-serif;color:var(--ink,#243d44);background:var(--paper,#fff);border:1px solid var(--line,#dce4e4);border-radius:12px;overflow:clip}.ds-coach>h2{font-size:13px;font-weight:700;letter-spacing:-.02em;line-height:1.4;margin:0;padding:10px 12px}.ds-position{padding:12px 12px 20px}.ds-context{font-size:11px;color:var(--muted,#576a70);font-variant-numeric:tabular-nums;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line,#dce4e4)}.ds-message{margin-bottom:10px}.ds-message .ds-author{display:block;font-size:10px;font-weight:800;color:var(--green,#286352);margin-bottom:3px}.ds-message-content{font-size:13px;line-height:1.6;overflow-wrap:anywhere}.ds-message-content>*{margin-block:0 8px}.ds-message-content>:last-child{margin-bottom:0}.ds-message-content :is(h1,h2,h3,h4,h5,h6){font-size:1em;font-weight:800;line-height:1.5;letter-spacing:normal;text-wrap:wrap}.ds-message-content :is(ul,ol){padding-inline-start:20px}.ds-message-content li+li{margin-top:3px}.ds-message-content li>p{margin-block:4px}.ds-message-content blockquote{margin-inline:0;padding-inline-start:10px;border-inline-start:1px solid var(--line,#dce4e4);color:var(--muted,#576a70)}.ds-message-content code{font-family:ui-monospace,monospace;font-size:.95em;font-weight:600;background:var(--soft,#e9efed);padding:1px 4px;border-radius:3px;white-space:break-spaces}.ds-message-content pre{padding:8px;background:var(--soft,#e9efed);border-radius:5px;white-space:pre-wrap}.ds-message-content pre code{padding:0}.ds-message-content a[href]{color:var(--green,#286352);text-decoration:underline;text-underline-offset:4px}.ds-message-content a:focus-visible{outline:3px solid var(--focus,#2d735e);outline-offset:4px}.ds-message-content table{width:100%;table-layout:fixed;border-collapse:collapse}.ds-message-content :is(th,td){border:1px solid var(--line,#dce4e4);padding:4px 6px;text-align:start}.ds-message-content hr{border:0;border-top:1px solid var(--line,#dce4e4)}.ds-message-content blockquote>p{margin:0}"
     },
     {
       "name": "Board material",
@@ -489,7 +512,8 @@
       "Do use green for available actions, coaching identity and current state.",
       "Do preserve keyboard focus, visible or accessible labels and reduced-motion behavior.",
       "Do keep move validation, icon-based notation help and rejected input close to entry.",
-      "Do attach follow-ups to their position and reveal new instructions after accepted moves.",
+      "Do attach follow-ups to their position and reveal each new player or coach message from its beginning.",
+      "Do preserve semantic Markdown structure with compact message typography, wrapping code and readable tables.",
       "Do disclose scripted coaching and illustrative data in functional copy.",
       "Do use the existing plain CSS layers and imported Chessground material."
     ],

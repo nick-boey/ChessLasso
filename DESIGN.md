@@ -13,6 +13,7 @@ colors:
   field-line: '#c7d3d2'
   placeholder: '#64767a'
   player-message: '#f0f4f3'
+  soft: '#e9efed'
   board-frame: '#d6bd99'
   board-light: '#f0d9b5'
   board-dark: '#c0ae91'
@@ -65,6 +66,16 @@ typography:
     fontSize: '13px'
     fontWeight: 400
     lineHeight: 1.6
+  message-heading:
+    fontFamily: 'Manrope Variable, sans-serif'
+    fontSize: '13px'
+    fontWeight: 800
+    lineHeight: 1.5
+    letterSpacing: 'normal'
+  message-code:
+    fontFamily: 'ui-monospace, monospace'
+    fontSize: '0.95em'
+    fontWeight: 600
   label:
     fontFamily: 'Manrope Variable, sans-serif'
     fontSize: '12px'
@@ -81,6 +92,7 @@ typography:
     fontWeight: 400
     lineHeight: 1.65
 rounded:
+  inline-code: '3px'
   tag: '4px'
   board: '5px'
   icon: '6px'
@@ -152,6 +164,9 @@ components:
     backgroundColor: '{colors.paper}'
     textColor: '{colors.ink}'
     rounded: '{rounded.panel}'
+  message-content:
+    textColor: '{colors.ink}'
+    typography: '{typography.conversation}'
   board-frame:
     backgroundColor: '{colors.board-frame}'
     rounded: '{rounded.board}'
@@ -200,6 +215,7 @@ The palette combines cool work surfaces with warm board materials; the frontmatt
 - **Paper Hairline** (`line`): panel edges and section dividers.
 - **Field Hairline** (`field-line`) and **Placeholder Slate** (`placeholder`): form boundaries and examples.
 - **Player Paper** (`player-message`): inset learner messages.
+- **Soft Paper** (`soft`): inline notation and preformatted blocks inside Markdown messages.
 - **Dialog Scrim** (`backdrop`): translucent separation around a modal.
 - **Prototype Paper** (`prototype-surface`) and **Prototype Ink** (`prototype-ink`): functional prototype disclosure.
 
@@ -218,7 +234,7 @@ Errors use `error` with `error-surface` in the notation guide. Imported Chessgro
 - **Title:** functional section names use the title token; the coach heading is 13px. Dialog titles use dialog-title, reducing to 18px on mobile.
 - **Section title:** the section-title token supports reading surfaces; annotated demonstration steps use 17px.
 - **Body:** the body token supplies the base. Reading-section paragraphs have a maximum measure of 70ch.
-- **Conversation:** the conversation token keeps short coaching messages compact and readable.
+- **Conversation:** the conversation token keeps coaching messages compact and readable. Semantic Markdown headings use message-heading at the same size with heavier weight; inline and fenced code use message-code.
 - **Label:** the label token serves controls and move-entry labels. Navigation has its own slightly larger, lighter token.
 - **Metadata:** the metadata token supports authors and compact state. Minor disclosures range from 9–11px; these are supporting copy, not primary instructions.
 
@@ -238,7 +254,7 @@ Reading surfaces retain a `1.65fr / minmax(280px, 1fr)` desktop grid with a 16px
 
 ## Elevation & Depth
 
-Resting work surfaces are flat: white paper, fine borders and tonal insets create hierarchy without card shadows. Only native dialogs use the ambient shadow `0 16px 60px #152e3b26` and the dark petrol scrim. A dialog arrives over 180ms with `cubic-bezier(0.16, 1, 0.3, 1)`, moving from 8px below at 0.8 opacity to rest. Reduced-motion CSS removes animations and transitions and restores automatic scrolling. Chessground separately disables its 180ms piece animation when reduced motion is requested at mount. After accepted moves, transcript scrolling is smooth by default and instant under reduced motion; mobile also brings the coach panel into view without moving keyboard focus away from move entry.
+Resting work surfaces are flat: white paper, fine borders and tonal insets create hierarchy without card shadows. Only native dialogs use the ambient shadow `0 16px 60px #152e3b26` and the dark petrol scrim. A dialog arrives over 180ms with `cubic-bezier(0.16, 1, 0.3, 1)`, moving from 8px below at 0.8 opacity to rest. Reduced-motion CSS removes animations and transitions and restores automatic scrolling. Chessground separately disables its 180ms piece animation when reduced motion is requested at mount. Each new player or coach message triggers transcript scrolling toward its start, smooth by default and instant under reduced motion. New position sections without messages target their context instead. Mobile also brings the coach panel into view; scrolling does not take keyboard focus from the active input.
 
 **The Flat Workspace Rule.** Reserve ambient elevation and a scrim for dialogs; ordinary panels use borders and tone.
 
@@ -270,7 +286,15 @@ Hint, Observe / Resume coaching and Example are bordered, 5px-rounded action chi
 
 The coach panel is white paper with a hairline boundary and panel rounding. Its simplified header contains a small Coach label, optional Observing state and availability dot. Coach messages remain on the paper; learner messages use a 9px-rounded tonal inset with a 10px left indent and 7px 10px padding. Message text wraps safely at 13px with 1.6 line height.
 
-Each position owns a conversation section, introduced by a tabular move-context label and hairline divider. Accepted moves append a new section and scroll its instruction to the top of the transcript. Earlier discussion remains attached to its original position; subsequent messages and quick actions append to the current section. In Observe mode an empty new section displays Observing. Conversation updates remain polite live announcements, and scroll behavior honors reduced motion.
+Each position owns a conversation section, introduced by a tabular move-context label and hairline divider. Accepted moves append a new section. A reactive message key targets the newest player or coach message after rendering, including follow-ups within the same position; an empty section targets its position context. Long replies open at their beginning, with the remaining content available through transcript scrolling. Earlier discussion remains attached to its original position; subsequent messages and quick actions append to the current section. In Observe mode an empty new section displays Observing. Conversation updates remain polite live announcements, and scroll behavior honors reduced motion.
+
+### Markdown messages
+
+Both player and coach messages render sanitized Markdown with the same compact conversation treatment. Semantic headings retain their structure while all six levels use the message-heading role, normal tracking and wrapping. Top-level blocks have 8px bottom spacing, with no trailing gap after the last block. Lists indent by 20px; adjacent items have 3px spacing and paragraphs inside items have 4px vertical margins.
+
+Blockquotes use muted text with a hairline on the leading edge and 10px inset. Inline code uses Soft Paper, a 3px radius and 1px 4px padding; preformatted blocks use 8px padding, a 5px radius and wrapping whitespace. Links remain green and underlined with the global keyboard-focus treatment. Tables use full width, fixed column layout, collapsed hairlines and 4px 6px cells aligned to the start. Horizontal rules use a single hairline. Text and long notation wrap within the message on desktop and mobile.
+
+Markdown supports emphasis, deletion, lists, quotations, headings, code, links and tables. Rendered HTML is sanitized to the implemented semantic allowlist; preserve this boundary when extending message presentation.
 
 ### Board and demonstration
 
@@ -284,7 +308,8 @@ Chessground supplies the brown checker and Cburnett pieces. Boards are view-only
 - **Do** use green for available actions, coaching identity and current state.
 - **Do** preserve keyboard focus, visible or accessible labels and reduced-motion behavior.
 - **Do** keep move validation, icon-based notation help and rejected input close to entry.
-- **Do** attach follow-ups to their position and reveal new instructions after accepted moves.
+- **Do** attach follow-ups to their position and reveal each new player or coach message from its beginning.
+- **Do** preserve semantic Markdown structure with compact message typography, wrapping code and readable tables.
 - **Do** disclose scripted coaching and illustrative data in functional copy.
 - **Do** use the existing plain CSS layers and imported Chessground material.
 
