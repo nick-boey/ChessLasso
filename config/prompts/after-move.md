@@ -1,0 +1,1 @@
+The player has committed {move}. Inspect the authoritative board and decide whether to offer feedback, ask about their thinking, or let them continue. Record any revealing assistance before exposing it. Never assume observed exposure time measures thought or attention.

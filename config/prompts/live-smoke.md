@@ -1,0 +1,1 @@
+This is a bounded integration check using a synthetic starting position. Call inspect_board, then call analyse_position with that board version, 80 milliseconds, depth 8 and one variation. Finish by giving only the engine's candidate move in SAN. Do not change the board or any coaching record. Do not reveal credentials. This is a tool-calling check, not a training assessment.

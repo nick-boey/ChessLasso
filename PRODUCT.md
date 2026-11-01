@@ -31,7 +31,7 @@ Board and conversation are the core interface on desktop and mobile. All player 
 - Nightly Codex improvements may deploy after checks, with rollback and no restart during active use. Personal data and permissions remain protected.
 - No budget cap by default; runtime-configurable warning or hard cap. Do not preferentially defer background improvements.
 - Add client/server OpenTelemetry traces, logs and metrics, stored locally outside Git with rolling 90-day retention. Preserve the separate durable coaching archive.
-- Public application source is GPL compatible. The prototype uses deterministic mock coaching, not paid models or a real nightly automation.
+- Public application source is GPL compatible. Deterministic mock mode remains available alongside live Pi/Stockfish coaching. Autonomous code deployment remains pending a verified isolated runner and external release adapter.
 
 ## Brand Commitments
 

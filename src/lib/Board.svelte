@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Chess } from 'chess.js';
   import { Chessground } from '@lichess-org/chessground';
   import type { Api } from '@lichess-org/chessground/api';
   import type { Key } from '@lichess-org/chessground/types';
@@ -15,6 +16,21 @@
     lastMove?: [string, string] | null;
     label?: string;
   } = $props();
+  const descriptionId = 'board-' + crypto.randomUUID();
+  const description = $derived(
+    new Chess(fen)
+      .board()
+      .flatMap((rank) =>
+        rank.flatMap((piece) =>
+          piece
+            ? [
+                `${piece.color === 'w' ? 'White' : 'Black'} ${{ p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' }[piece.type]} on ${piece.square}`,
+              ]
+            : [],
+        ),
+      )
+      .join('; '),
+  );
   let element: HTMLDivElement;
   let board = $state.raw<Api>();
   onMount(() => {
@@ -47,5 +63,8 @@
   class="chess-board"
   role="img"
   aria-label={label}
+  aria-describedby={descriptionId}
   bind:this={element}
 ></div>
+
+<p id={descriptionId} class="sr-only">{description}</p>

@@ -110,3 +110,9 @@ export function validBudget(value: unknown): value is Budget {
     budget.amount > 0
   );
 }
+
+export interface Demonstration {
+  title: string;
+  initialFen?: string;
+  steps: { title: string; note: string; moves: string[] }[];
+}

@@ -1,6 +1,6 @@
 # ChessLasso product requirements and implementation design
 
-Status: approved interview decisions, implementation specification. The accompanying application is an interactive prototype. Production capabilities below are requirements unless explicitly listed as implemented in section 2.
+Status: approved design plus usable version 0.2 implementation. The real Pi/Gemini/Stockfish training path, durable private archive, daily scheduler and local observability are implemented and tested as described in docs/VALIDATION.md. Isolated Codex execution and automatic release/rollback remain pending external runner setup; other operational limits are recorded there. Requirements below remain the target acceptance contract, not a claim that every scenario has been operationally verified.
 
 ## 1. Purpose and success
 
@@ -14,21 +14,19 @@ The first release serves one player, locally, through a desktop/mobile browser e
 
 ## 2. Delivery boundary
 
-| Capability                                       | Interactive prototype                                     | Production requirement                                         |
-| ------------------------------------------------ | --------------------------------------------------------- | -------------------------------------------------------------- |
-| Svelte UI and TypeScript Hono backend            | Implemented                                               | Retain and extend                                              |
-| Board, notation validation, legal opponent moves | Real rules and deterministic legal opponent               | Stockfish and agent-selected opponents                         |
-| Coach chat, notes, setup actions, lesson modal   | Scripted responses and actions                            | Pi sessions with real model/tool calls                         |
-| Separate question board                          | Legal candidate-entry check                               | Agent-generated questions and structured feedback              |
-| Profile and coaching journal                     | Clearly labelled examples and ephemeral session events    | Evidence-linked private archive                                |
-| PGNs                                             | Browser position recovery; no individual download control | Timestamped annotated archive, import, index and search        |
-| Presence                                         | Browser visibility/focus/connection observations          | Durable reconciled timing events                               |
-| Budget                                           | Browser-local editable preference; no paid calls          | Atomic admission control and provider usage ledger             |
-| Consolidation, assistant coach, nightly Codex    | Specified here, not scheduled                             | Durable jobs, critique, tests, deployment and rollback         |
-| GitHub backups                                   | No repository creation or publishing in prototype         | Separate public code and private coaching repositories         |
-| OpenTelemetry                                    | Specified in architecture; no SDK/collector yet           | Client/server traces, logs and metrics; local 90-day retention |
+| Capability                                                     | Version 0.2 state                                                                                     | Remaining verification or limit                                                                                  |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Compact Svelte/Hono, keyboard SAN, move-scoped chat and boards | Implemented;12 browser scenarios pass                                                                 | Real phones/screen readers not tested                                                                            |
+| Stockfish + Pi coaching                                        | Actual local engine and restricted Pi tools; live Gemini HTTP turn/restart passes                     | Requested3.8 Flash listed but generation timed out; explicit verified3 Flash preview default; Fireworks untested |
+| Durable profile, plans, diary, PGNs/index and native logs      | SQLite plus separate private Git archive; first backup pushed; checkpoint recovery tested             | Long-running archive size/restore scale not exercised                                                            |
+| Presence and control                                           | Focus/visibility/heartbeat records, unknown gaps, single-device move lease                            | Exposure is not attention; training games currently untimed                                                      |
+| Runtime budgets/prompts                                        | Per-model-request reservations, editable modes/provider/model, revision history and undo              | Invoice estimates; external Codex accounting separate                                                            |
+| Imports and search                                             | Original/derived PGNs, metadata, dedup/quarantine, Chess.com incremental cursor, bounded QuickJS      | Real account import/throttling not live tested                                                                   |
+| Daily independent meeting                                      | Sydney 04:00 durable scheduler, two critique rounds, staged accepted updates, catch-up/retry fixtures | Synthetic full live daily meeting passed; long-duration scheduling untested                                      |
+| Local OpenTelemetry                                            | Client/server traces/logs/metrics, W3C context, allowlisted JSONL collector,90-day expiry             | Normalized JSONL rather than full OTLP replay; long-duration disk operation untested                             |
+| Nightly Codex/self-deployment                                  | External supervisor candidate pipeline and protected gates; accepted backlog queue                    | **Pending verified isolated runner and release adapter; Docker daemon stopped. No automatic rollout claimed.**   |
 
-The prototype is a reviewable interaction model, not an operational self-improving coach. It stays in mock mode even when `GEMINI_API_KEY` exists in `.env`; use that server-only key when implementing live coaching after prototyping. It makes no paid model calls. Browser recovery preserves the current PGN, quiet preference and budget preference, not a coaching archive or complete transcript.
+Mock mode remains deterministic even when `.env` has a key. Live mode is an explicit persisted runtime choice. Secrets and personal records never belong in the public code repository.
 
 ## 3. Learning strategy and evidence
 

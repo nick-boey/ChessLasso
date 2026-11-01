@@ -1,0 +1,104 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Chess } from 'chess.js';
+import { CoachRuntime, redactCoachText, type CoachContext } from '../server/coach.js';
+import { analysePosition, enginePosition, legalUci } from '../server/engine.js';
+
+void test('engine receives complete history, rejects mismatches and validates returned moves', async () => {
+  const chess = new Chess();
+  for (const move of ['Nf3', 'Nf6', 'Ng1', 'Ng8']) chess.move(move);
+  assert.match(
+    enginePosition({ fen: chess.fen(), pgn: chess.pgn() }).command,
+    /moves g1f3 g8f6 f3g1 f6g8$/,
+  );
+  assert.throws(() => enginePosition({ fen: chess.fen(), pgn: '1. e4' }), /does not match/);
+  assert.throws(() => legalUci(chess, 'e2e5'), /illegal/);
+  await assert.rejects(analysePosition({ fen: chess.fen(), milliseconds: 50000 }), /out of range/);
+  const result = await analysePosition({
+    fen: chess.fen(),
+    pgn: chess.pgn(),
+    milliseconds: 80,
+    variations: 2,
+  });
+  assert.match(result.engine, /Stockfish/);
+  assert.ok(result.bestmove);
+  assert.equal(legalUci(chess, result.bestmove).san, result.san);
+  assert.ok(result.network.length > 0);
+  assert.ok(result.variations.length > 0);
+  assert.equal(result.variations[0]?.score.perspective, 'white');
+  await assert.rejects(
+    analysePosition({ fen: chess.fen(), signal: AbortSignal.abort() }),
+    /cancelled/,
+  );
+  const controller = new AbortController();
+  const cancelled = analysePosition({
+    fen: chess.fen(),
+    milliseconds: 3000,
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(cancelled, /cancelled/);
+});
+
+void test('restricted Pi mock executes the real tool boundary and preserves native JSONL history', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'chesslasso-pi-'));
+  const context: CoachContext = { fen: new Chess().fen(), pgn: '', version: 4 };
+  const calls: string[] = [];
+  let paid = 0;
+  const runtime = new CoachRuntime({
+    sessionsDir: directory,
+    getSettings: () => ({ mode: 'mock', provider: 'google', model: 'gemini-3.8-flash' }),
+    getPrompt: async (role) => ({
+      text: await readFile(`config/prompts/${role}.md`, 'utf8'),
+      version: 'test-v1',
+    }),
+    invokeTool: async (name, args) => {
+      calls.push(name);
+      return { ok: true, version: context.version, ...args };
+    },
+    beforePaidCall: () => {
+      paid++;
+    },
+  });
+  try {
+    const fakeKey = `AIza${'x'.repeat(35)}`;
+    assert.equal(redactCoachText(`key=${fakeKey}`), 'key=[REDACTED]');
+    const lesson = await runtime.run(`Show me an example ${fakeKey}`, context);
+    assert.ok(lesson.text.length > 0);
+    assert.equal(lesson.actions[0]?.name, 'show_demonstration');
+    assert.equal(lesson.actions[0]?.args.title, 'Bring your pieces into the game');
+    const quiet = await runtime.run('Please observe quietly', context);
+    assert.equal(quiet.sessionId, lesson.sessionId);
+    assert.equal(quiet.actions[0]?.args.quiet, true);
+    assert.deepEqual(calls, ['show_demonstration', 'start_activity']);
+    assert.equal(paid, 0);
+    const dateDir = join(directory, new Date().toISOString().slice(0, 10), 'coach');
+    const filename = (await readdir(dateDir)).find((file) => file.endsWith('.jsonl'));
+    assert.ok(filename);
+    const entries = (await readFile(join(dateDir, filename), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.ok(
+      entries.some(
+        (entry) =>
+          entry.type === 'message' && (entry.message as { role?: string })?.role === 'toolResult',
+      ),
+    );
+    assert.ok(entries.some((entry) => typeof entry.parentId === 'string'));
+    assert.match(JSON.stringify(entries), /effectivePrompt/);
+    assert.ok(!JSON.stringify(entries).includes(fakeKey));
+    assert.match(JSON.stringify(entries), /REDACTED/);
+    const review = await runtime.run('Critique the proposed plan', context, 'assistant-coach');
+    assert.notEqual(review.sessionId, lesson.sessionId);
+    const reviewDir = join(directory, new Date().toISOString().slice(0, 10), 'assistant-coach');
+    const reviewFile = (await readdir(reviewDir)).find((file) => file.endsWith('.jsonl'));
+    const recorded = await readFile(join(reviewDir, reviewFile!), 'utf8');
+    assert.doesNotMatch(recorded, /"name":"(?:bash|write|edit|play_move|revise_prompt)"/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

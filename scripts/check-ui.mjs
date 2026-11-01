@@ -1,9 +1,38 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { spawn, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Chess } from 'chess.js';
 
-const baseURL = process.env.CHESSLASSO_TEST_URL ?? 'http://127.0.0.1:5173';
+const baseURL = process.env.CHESSLASSO_TEST_URL ?? 'http://127.0.0.1:4174';
+const temporary = await mkdtemp(join(tmpdir(), 'chesslasso-browser-'));
+let server;
+if (!process.env.CHESSLASSO_TEST_URL) {
+  const build = spawnSync('npm', ['run', 'build'], { stdio: 'inherit' });
+  assert.equal(build.status, 0);
+  server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
+    env: {
+      ...process.env,
+      PORT: '4174',
+      CHESSLASSO_RUNTIME_DIR: join(temporary, 'runtime'),
+      CHESSLASSO_ARCHIVE_DIR: join(temporary, 'archive'),
+      CHESSLASSO_ORIGINS: baseURL,
+    },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let startupError = '';
+  server.stderr.on('data', (chunk) => (startupError += chunk.toString()));
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      if ((await fetch(baseURL + '/api/health')).ok) break;
+    } catch {}
+    if (server.exitCode !== null) throw new Error('Test server failed: ' + startupError);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 const output = 'output/playwright';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -15,9 +44,8 @@ const page = await context.newPage();
 const errors = [];
 const passed = [];
 page.on('pageerror', (error) => errors.push(error.message));
-const stored = () =>
-  page.evaluate(() => JSON.parse(localStorage.getItem('chesslasso-prototype-v1')));
-const pgn = async () => (await stored()).pgn;
+const stored = async () => await (await fetch(baseURL + '/api/state')).json();
+const pgn = async () => (await stored()).game.pgn;
 const move = page.getByRole('textbox', { name: 'Your move', exact: true });
 const chat = page.getByRole('textbox', { name: 'Message your coach' });
 const send = async (text) => {
@@ -29,7 +57,7 @@ const send = async (text) => {
 
 try {
   await page.goto(baseURL);
-  await page.waitForFunction(() => localStorage.getItem('chesslasso-prototype-v1'));
+  await page.waitForFunction(() => !document.querySelector('#move')?.disabled);
   const initial = await pgn();
   assert.equal(await page.locator('.activity-heading h1').innerText(), 'Development & king safety');
   assert.equal(await page.getByRole('button', { name: 'New game', exact: true }).count(), 0);
@@ -60,9 +88,7 @@ try {
   await move.fill('Nc3');
   await move.press('Enter');
   await page.waitForFunction(
-    () =>
-      JSON.parse(localStorage.getItem('chesslasso-prototype-v1')).pgn.includes('Nc3') &&
-      document.querySelector('#move').value === '',
+    () => document.querySelector('#move').value === '' && !document.querySelector('#move').disabled,
   );
   let played = await pgn();
   const chess = new Chess();
@@ -109,7 +135,11 @@ try {
   await send('I am considering developing a piece');
   await page.getByRole('button', { name: 'Open question board', exact: true }).click();
   await page.getByRole('textbox', { name: 'Your candidate move', exact: true }).fill('d3');
-  await page.getByRole('button', { name: 'Check notation', exact: true }).click();
+  await page.getByRole('button', { name: 'Check candidate', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .getByText(/d3 is a legal candidate/)
+    .waitFor();
   assert.match(await page.getByRole('dialog').innerText(), /d3 is a legal candidate/);
   await page.keyboard.press('Escape');
   assert.equal(await pgn(), played);
@@ -121,7 +151,9 @@ try {
   await page.getByRole('button', { name: 'Save preferences', exact: true }).click();
   await page.reload();
   await page.waitForFunction(() =>
-    document.querySelector('.move-context')?.textContent.includes('O-O'),
+    document
+      .querySelector('.move-conversation:last-child .move-context')
+      ?.textContent.includes('O-O'),
   );
   assert.deepEqual((await stored()).budget, { mode: 'hard', amount: 25 });
   assert.equal(await pgn(), played);
@@ -154,30 +186,33 @@ try {
   await context.setOffline(false);
   await move.press('Enter');
   await page.waitForFunction(
-    () =>
-      JSON.parse(localStorage.getItem('chesslasso-prototype-v1')).pgn.includes('e4') &&
-      document.querySelector('#move').value === '',
+    () => document.querySelector('#move').value === '' && !document.querySelector('#move').disabled,
   );
   passed.push('Disconnected submission preserves game and retries after reconnect');
 
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
-  assert.match(await page.locator('main').innerText(), /Not assessed/);
+  assert.match(await page.locator('main').innerText(), /Baseline not assessed/);
   await page.getByRole('button', { name: 'Journal', exact: true }).click();
-  assert.match(await page.locator('main').innerText(), /Example coaching meeting/);
+  assert.match(await page.locator('main').innerText(), /Coaching diary/);
   await page.getByRole('button', { name: 'Board', exact: true }).click();
 
-  await page.evaluate(() => localStorage.clear());
+  await send('Start a new game');
+  await send('Resume coaching and help again');
   await page.reload();
-  await page.waitForFunction(() => localStorage.getItem('chesslasso-prototype-v1'));
+  await page.waitForFunction(() => !document.querySelector('#move')?.disabled);
   for (const width of [320, 390, 760, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     assert.ok(scrollWidth <= width, `Horizontal overflow at ${width}px: ${scrollWidth}`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await move.fill('Nc3');
+  const conversationCount = await page.locator('.move-conversation').count();
+  await move.fill('e4');
   await move.press('Enter');
-  await page.waitForFunction(() => document.querySelectorAll('.move-conversation').length === 2);
+  await page.waitForFunction(
+    (count) => document.querySelectorAll('.move-conversation').length === count + 1,
+    conversationCount,
+  );
   await page.waitForFunction(() => {
     const current = document.querySelector('.move-conversation:last-child').getBoundingClientRect();
     return current.top >= 0 && current.top < innerHeight;
@@ -203,4 +238,9 @@ try {
   );
 } finally {
   await browser.close();
+  if (server) {
+    server.kill('SIGTERM');
+    await new Promise((resolve) => server.once('exit', resolve));
+  }
+  await rm(temporary, { recursive: true, force: true });
 }

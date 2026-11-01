@@ -6,11 +6,10 @@
   import {
     loadGame,
     practiceGame,
-    snapshot,
     validBudget,
     playNotation,
   } from './lib/chess';
-  import type { Budget, GameState } from './lib/chess';
+  import type { Budget, GameState, Demonstration } from './lib/chess';
   import coach from '../config/mock-coach.json';
 
   type Page = 'today' | 'progress' | 'journal';
@@ -21,6 +20,7 @@
     text: string;
     action?: string;
     fen?: string;
+    demonstration?: Demonstration;
   };
   type MoveConversation = {
     id: number;
@@ -48,7 +48,7 @@
   let game = $state(practiceGame());
   let notation = $state('');
   let chat = $state('');
-  let conversationId = 0;
+
   let activity = $state<Activity>(coach.activities.development);
   let conversations = $state<MoveConversation[]>([]);
   let events = $state<PracticeEvent[]>([]);
@@ -60,6 +60,36 @@
   let chatError = $state('');
   let savedNotice = $state('');
   let ready = $state(false);
+  let version = $state(0);
+  let mode = $state<'mock' | 'live'>('mock');
+  let playerSide = $state('w');
+  let provider = $state('google');
+  let model = $state('gemini-3-flash-preview');
+  let paused = $state(false);
+  let hasControl = $state(true);
+  let profile = $state('Baseline not assessed.');
+  let plan = $state('Establish a varied baseline.');
+  let diary = $state<string[]>([]);
+  let totals = $state({
+    moves: 0,
+    assistance: 0,
+    notationRejects: 0,
+    games: 0,
+  });
+  let accessToken = $state('');
+  let loginRequired = $state(false);
+  let importText = $state('');
+  let importUsername = $state('');
+  let backupStatus = $state('No backup yet');
+  let developmentStatus = $state('');
+  let spent = $state(0);
+  const clientId =
+    sessionStorage.getItem('chesslasso-device') ?? crypto.randomUUID();
+  sessionStorage.setItem('chesslasso-device', clientId);
+  let presenceSequence = Date.now();
+  let revision = 0;
+  let pendingMove:
+    { id: string; notation: string; version: number } | undefined;
   let apiConnected = $state(false);
   let visible = $state(true);
   let modal = $state<Modal>(null);
@@ -69,45 +99,21 @@
   let coachPanel = $state<HTMLElement>();
   let step = $state(0);
   let questionFen = $state(practiceGame().fen);
+  let questionMessageId = $state<number | undefined>();
   let candidate = $state('');
   let candidateResult = $state('');
+  let answering = $state(false);
   let budget = $state<Budget>({ mode: 'none', amount: 50 });
   let budgetDraft = $state<Budget>({ mode: 'none', amount: 50 });
   let settingsError = $state('');
-  const demo = coach.demonstration;
+  let demo = $state<Demonstration>(coach.demonstration);
   const demoFen = $derived.by(() => {
-    const board = new Chess();
+    const board = new Chess(
+      (demo as typeof demo & { initialFen?: string }).initialFen,
+    );
     for (const move of demo.steps[step].moves) board.move(move);
     return board.fen();
   });
-  const assists = $derived(
-    events.filter((event) =>
-      ['hint', 'demonstrate', 'question'].includes(event.kind),
-    ).length,
-  );
-
-  function beginConversation(text?: string, response?: CoachResponse) {
-    const moves = game.moves;
-    const label = moves.length
-      ? `${Math.ceil(moves.length / 2)}. ${moves.length % 2 ? moves.at(-1) : moves.slice(-2).join(' ')}`
-      : 'Position';
-    conversations.push({
-      id: ++conversationId,
-      fen: game.fen,
-      label,
-      messages: text
-        ? [
-            {
-              id: ++messageId,
-              role: 'coach',
-              text,
-              action: response?.action,
-              fen: response?.fen,
-            },
-          ]
-        : [],
-    });
-  }
 
   async function showCurrentConversation() {
     await tick();
@@ -124,6 +130,13 @@
       coachPanel?.scrollIntoView({ block: 'nearest', behavior });
   }
 
+  function importSummary(results: unknown[]) {
+    const failed = results.filter(
+      (item) => item && typeof item === 'object' && 'error' in item,
+    ).length;
+    return `Imported ${results.length - failed} games.${failed ? ` ${failed} malformed records quarantined.` : ''}`;
+  }
+
   function record(kind: string, detail: string) {
     events = [
       ...events.slice(-199),
@@ -131,78 +144,112 @@
     ];
   }
 
-  onMount(() => {
-    try {
-      const raw = localStorage.getItem('chesslasso-prototype-v1');
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (typeof saved.pgn === 'string') game = snapshot(loadGame(saved.pgn));
-        if (validBudget(saved.budget)) budget = saved.budget;
-        if (typeof saved.quiet === 'boolean') quiet = saved.quiet;
-        if (
-          typeof saved.activity?.heading === 'string' &&
-          typeof saved.activity?.subtitle === 'string'
-        )
-          activity = saved.activity;
-      }
-    } catch {
-      savedNotice =
-        'The saved demo could not be restored. A fresh practice position is ready.';
+  function restore(saved: any) {
+    if (ready && saved.version < version) return;
+    if (saved.playerSide !== playerSide) {
+      playerSide = saved.playerSide;
+      flipped = playerSide === 'b';
     }
-    beginConversation(coach.welcome);
-    ready = true;
+    game = saved.game;
+    version = saved.version;
+    activity = saved.activity;
+    quiet = saved.quiet;
+    budget = saved.budget;
+    mode = saved.mode;
+    provider = saved.provider;
+    model = saved.model;
+    paused = saved.paused;
+    conversations = saved.conversations;
+    messageId = Math.max(
+      0,
+      ...conversations.flatMap((item) =>
+        item.messages.map((message) => message.id),
+      ),
+    );
+    profile = saved.stats.profile;
+    plan = saved.stats.plan;
+    totals = saved.stats;
+    diary = saved.journal;
+    spent = saved.usage?.amount ?? 0;
+    if (saved.budget.mode === 'warning' && spent >= saved.budget.amount)
+      savedNotice =
+        'Monthly model spend estimate reached your warning threshold. Coaching and background work continue.';
+    developmentStatus =
+      saved.development?.reason ?? saved.development?.status ?? '';
+    backupStatus = saved.backup.ok
+      ? 'Private backup current'
+      : saved.backup.pending
+        ? 'Private backup pending'
+        : 'No backup yet';
+  }
+  async function refresh() {
+    try {
+      const response = await fetch('/api/state');
+      if (response.status === 401) {
+        loginRequired = true;
+        return;
+      }
+      if (!response.ok) throw new Error('Server unavailable');
+      restore(await response.json());
+      apiConnected = true;
+      ready = true;
+      loginRequired = false;
+    } catch {
+      apiConnected = false;
+    }
+  }
+  async function presence() {
     visible = document.visibilityState === 'visible';
-    record('opened', 'Prototype opened; presence is not proof of attention.');
-    const presence = () => {
-      visible = document.visibilityState === 'visible';
-      record('visibility', visible ? 'visible' : 'hidden');
-    };
+    try {
+      const result = await api<{ control: boolean }>('/api/presence', {
+        clientId,
+        seq: ++presenceSequence,
+        visible,
+        focused: document.hasFocus(),
+        version,
+        monotonicMs: performance.now(),
+      });
+      hasControl = result.control;
+    } catch {
+      apiConnected = false;
+    }
+  }
+  onMount(() => {
+    void refresh().then(presence);
     const offline = () => {
       apiConnected = false;
-      record('connection', 'Browser offline');
     };
-    const health = async () => {
-      try {
-        const response = await fetch('/api/health');
-        apiConnected = response.ok;
-      } catch {
-        apiConnected = false;
-      }
-    };
-    const focus = () =>
-      record('focus', document.hasFocus() ? 'focused' : 'blurred');
     document.addEventListener('visibilitychange', presence);
     window.addEventListener('offline', offline);
-    window.addEventListener('online', health);
-    window.addEventListener('focus', focus);
-    window.addEventListener('blur', focus);
-    void health();
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', presence);
+    window.addEventListener('blur', presence);
     const heartbeat = setInterval(() => {
-      record('heartbeat', visible ? 'visible' : 'hidden');
-      void health();
+      void presence();
     }, 15000);
+    const stream = new EventSource('/api/stream');
+    stream.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (
+        (data.version !== version || data.revision !== revision) &&
+        !busy &&
+        !thinking
+      ) {
+        revision = data.revision;
+        void refresh();
+      }
+    };
     return () => {
       clearInterval(heartbeat);
+      stream.close();
       document.removeEventListener('visibilitychange', presence);
       window.removeEventListener('offline', offline);
-      window.removeEventListener('online', health);
-      window.removeEventListener('focus', focus);
-      window.removeEventListener('blur', focus);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', presence);
+      window.removeEventListener('blur', presence);
     };
   });
 
-  $effect(() => {
-    if (!ready) return;
-    try {
-      localStorage.setItem(
-        'chesslasso-prototype-v1',
-        JSON.stringify({ pgn: game.pgn, budget, quiet, activity }),
-      );
-    } catch {
-      savedNotice =
-        'Browser storage is unavailable. This position will not survive a reload.';
-    }
-  });
   $effect(() => {
     if (!dialog) return;
     if (modal && !dialog.open) dialog.showModal();
@@ -225,17 +272,20 @@
     }
     apiConnected = true;
     const result = await response.json();
-    if (!response.ok)
+    if (!response.ok) {
+      if (result.workspace) restore(result.workspace);
       throw new Error(
         result.error ??
           'That request could not be completed. Please try again.',
       );
+    }
     return result;
   }
 
   async function play(event: SubmitEvent) {
     event.preventDefault();
-    if (busy || thinking || game.over) return;
+    if (!ready || busy || thinking || game.over || paused || !hasControl)
+      return;
     error = '';
     // Validate before any request so a rejected entry never changes the board.
     try {
@@ -243,20 +293,38 @@
     } catch (reason) {
       error = (reason as Error).message;
       record('notation_rejected', notation);
+      void api('/api/event', { kind: 'notation_rejected', version }).catch(
+        () => {},
+      );
       modal = 'guide';
       return;
     }
     busy = true;
+    if (!pendingMove || pendingMove.notation !== notation)
+      pendingMove = { id: crypto.randomUUID(), notation, version };
     try {
       const result = await api<{
         game: GameState;
         played: string;
         note: string;
-      }>('/api/move', { pgn: game.pgn, notation });
-      game = result.game;
+        workspace: any;
+        demonstration?: typeof demo;
+      }>('/api/move', {
+        version: pendingMove.version,
+        clientId,
+        commandId: pendingMove.id,
+        notation,
+      });
+      restore(result.workspace);
+      pendingMove = undefined;
+      if (result.demonstration) {
+        demo = result.demonstration;
+        step = 0;
+        modal = 'demo';
+      }
       record('move', result.played);
       notation = '';
-      beginConversation(quiet ? undefined : result.note);
+
       if (!quiet) record('coaching_note', result.note);
       await showCurrentConversation();
     } catch (reason) {
@@ -280,34 +348,21 @@
     chat = '';
     thinking = true;
     try {
-      const result = await api<CoachResponse>('/api/coach', {
+      const result = await api<
+        CoachResponse & { workspace: any; demonstration?: typeof demo }
+      >('/api/coach', {
         message: text,
         fen: game.fen,
+        version,
+        commandId: crypto.randomUUID(),
       });
       record(result.action, result.text);
       if (result.action === 'demonstrate') {
         step = 0;
         modal = 'demo';
       }
-      if (result.activity) activity = result.activity;
-      if (result.game) {
-        game = result.game;
-        notation = '';
-        error = '';
-        page = 'today';
-        beginConversation(result.text, result);
-      } else {
-        conversation.messages.push({
-          id: ++messageId,
-          role: 'coach',
-          text: result.text,
-          action: result.action,
-          fen: result.fen,
-        });
-      }
-      if (result.action === 'quiet' || result.action === 'new_game')
-        quiet = true;
-      if (['hint', 'resume'].includes(result.action)) quiet = false;
+      if (result.demonstration) demo = result.demonstration;
+      restore(result.workspace);
     } catch (reason) {
       chatError = (reason as Error).message;
       chat = text;
@@ -323,28 +378,51 @@
     settingsError = '';
     modal = 'settings';
   }
-  function saveSettings(event: SubmitEvent) {
+  async function saveSettings(event: SubmitEvent) {
     event.preventDefault();
     if (!validBudget(budgetDraft)) {
       settingsError =
         'Enter a positive monthly amount, or keep the existing amount while disabling the cap.';
       return;
     }
-    budget = { ...budgetDraft };
-    record('budget_changed', budget.mode);
-    modal = null;
-    savedNotice =
-      'Budget preference saved in this browser. This prototype makes no paid model calls.';
+    try {
+      restore(
+        await api('/api/settings', {
+          budget: budgetDraft,
+          mode,
+          provider,
+          model,
+          paused,
+        }),
+      );
+      modal = null;
+      savedNotice = 'Preferences saved.';
+    } catch (reason) {
+      settingsError = (reason as Error).message;
+    }
   }
-  function answerQuestion(event: SubmitEvent) {
+  async function answerQuestion(event: SubmitEvent) {
     event.preventDefault();
+    if (answering) return;
+    answering = true;
     try {
       const board = new Chess(questionFen);
       const move = playNotation(board, candidate);
-      candidateResult = `${move.san} is a legal candidate. Your main game has not changed.`;
+      const result = await api<{ text: string; workspace: any }>(
+        '/api/answer',
+        {
+          fen: questionFen,
+          notation: move.san,
+          commandId: crypto.randomUUID(),
+        },
+      );
+      candidateResult = result.text;
+      restore(result.workspace);
       record('question_answer', move.san);
     } catch (reason) {
       candidateResult = (reason as Error).message;
+    } finally {
+      answering = false;
     }
   }
 </script>
@@ -400,17 +478,41 @@
     >
   </nav>
   <div class="header-actions">
-    <span class="prototype-tag">Interactive prototype</span><button
-      class="icon-button"
-      aria-label="Open settings"
-      onclick={settings}><Icon name="settings" /></button
+    <span class="prototype-tag">{mode === 'mock' ? 'Mock' : 'Live'}</span
+    ><button class="icon-button" aria-label="Open settings" onclick={settings}
+      ><Icon name="settings" /></button
     ><span class="avatar player-avatar" aria-label="Your profile">Y</span>
   </div>
 </header>
 
 <main>
+  {#if loginRequired}<form
+      class="paper-section"
+      onsubmit={async (event) => {
+        event.preventDefault();
+        try {
+          await api('/api/login', { token: accessToken });
+          window.location.reload();
+        } catch (reason) {
+          savedNotice = (reason as Error).message;
+        }
+      }}
+    >
+      <label for="access-token">Access token</label><input
+        id="access-token"
+        type="password"
+        bind:value={accessToken}
+      /><button class="primary-button">Sign in</button>
+    </form>{/if}
   {#if page === 'today'}
     {#if savedNotice}<p class="notice" role="status">{savedNotice}</p>{/if}
+    {#if !hasControl}<button
+        class="secondary-button"
+        onclick={async () => {
+          await api('/api/control', { clientId });
+          hasControl = true;
+        }}>Take move control on this device</button
+      >{/if}
     <div class="practice-layout">
       <section class="board-workspace" aria-label="Your game">
         <div class="activity-heading" aria-live="polite">
@@ -446,15 +548,25 @@
             spellcheck="false"
             aria-invalid={!!error}
             aria-describedby={error ? 'move-error' : undefined}
-            disabled={busy || thinking || game.over}
+            disabled={!hasControl ||
+              !ready ||
+              busy ||
+              thinking ||
+              game.over ||
+              paused}
           />
           <button
             class="play-move"
             type="submit"
             aria-label={busy ? 'Playing move' : 'Play move'}
             title="Play move"
-            disabled={busy || thinking || game.over || !notation.trim()}
-            ><Icon name="play" size={18} /></button
+            disabled={!hasControl ||
+              !ready ||
+              busy ||
+              thinking ||
+              game.over ||
+              paused ||
+              !notation.trim()}><Icon name="play" size={18} /></button
           >
           <button
             type="button"
@@ -480,8 +592,7 @@
             <h2>Coach</h2>
             {#if quiet}<span class="coach-state">Observing</span>{/if}
           </div>
-          <span class="availability-dot" aria-label="Scripted coach available"
-          ></span>
+          <span class="availability-dot" aria-label="Coach available"></span>
         </div>
         <div
           class="transcript"
@@ -511,6 +622,7 @@
                   {#if message.action === 'demonstrate'}<button
                       class="example-link"
                       onclick={() => {
+                        if (message.demonstration) demo = message.demonstration;
                         step = 0;
                         modal = 'demo';
                       }}
@@ -523,6 +635,7 @@
                       class="example-link"
                       onclick={() => {
                         questionFen = message.fen!;
+                        questionMessageId = message.id;
                         candidate = '';
                         candidateResult = '';
                         modal = 'question';
@@ -589,7 +702,10 @@
             >
           </form>
           {#if chatError}<p class="error-text" role="alert">{chatError}</p>{/if}
-          <p class="mock-label">Scripted coach · no AI model connected</p>
+          <p class="mock-label">
+            {mode === 'mock' ? 'Deterministic mock' : `${provider} · ${model}`} ·
+            {paused ? 'Paused' : 'Training'}
+          </p>
         </div>
       </aside>
     </div>
@@ -606,7 +722,7 @@
     <div class="reading-layout">
       <section class="paper-section">
         <h2>Baseline</h2>
-        <p>Not assessed. Sample profile; no training history yet.</p>
+        <p>{profile}</p>
         <div class="profile-facts">
           <div>
             <span>Long-term reference</span><strong>FIDE standard</strong>
@@ -620,13 +736,11 @@
             <span>Training commitment</span><strong>Not set</strong>
           </div>
         </div>
-        <h3>This browser session</h3>
+        <h3>Recorded training</h3>
         <div class="session-facts">
-          <span
-            ><strong
-              >{events.filter((event) => event.kind === 'move').length}</strong
-            > moves submitted</span
-          ><span><strong>{assists}</strong> assistance events</span>
+          <span><strong>{totals.moves}</strong> moves submitted</span><span
+            ><strong>{totals.assistance}</strong> assistance events</span
+          >
         </div>
         <p class="small-copy">
           Counts are observations, not evidence of improvement. Tab visibility
@@ -634,6 +748,52 @@
         </p>
       </section>
       <aside class="paper-section">
+        <h2>Import games</h2>
+        <form
+          onsubmit={async (event) => {
+            event.preventDefault();
+            try {
+              const result = await api<{ results: unknown[] }>(
+                '/api/import/pgn',
+                { pgn: importText },
+              );
+              savedNotice = importSummary(result.results);
+              await refresh();
+            } catch (reason) {
+              savedNotice = (reason as Error).message;
+            }
+          }}
+        >
+          <label for="pgn-import">PGN</label><textarea
+            id="pgn-import"
+            bind:value={importText}
+            rows="4"></textarea><button
+            class="secondary-button"
+            disabled={!importText.trim()}>Import PGN</button
+          >
+        </form>
+        <form
+          onsubmit={async (event) => {
+            event.preventDefault();
+            try {
+              const result = await api<{ results: unknown[] }>(
+                '/api/import/chesscom',
+                { username: importUsername },
+              );
+              savedNotice = importSummary(result.results);
+              await refresh();
+            } catch (reason) {
+              savedNotice = (reason as Error).message;
+            }
+          }}
+        >
+          <label for="chesscom-user">Chess.com username</label><input
+            id="chesscom-user"
+            bind:value={importUsername}
+          /><button class="secondary-button" disabled={!importUsername.trim()}
+            >Import archive</button
+          >
+        </form>
         <h2>Skills</h2>
         <ul class="skill-list">
           <li>
@@ -666,41 +826,22 @@
     <div class="reading-layout">
       <article class="paper-section journal-entry">
         <div class="journal-meta">
-          <span>Example coaching meeting</span><span
-            >04:00 · Australia/Sydney</span
-          >
+          <span>Coaching diary</span><span>04:00 · Australia/Sydney</span>
         </div>
-        <h3>Observation</h3>
-        <p>
-          A player develops a piece after a hint. That shows the hint was
-          usable. It does not yet show independent recognition.
-        </p>
-        <h3>Assistant coach’s challenge</h3>
-        <blockquote>
-          Could the learner find the same idea in an unfamiliar position? One
-          assisted success is not a trend.
-        </blockquote>
-        <h3>Next experiment</h3>
-        <p>
-          Return to development in a different, unlabelled position after a
-          delay. Ask for a candidate and an expected reply before providing
-          help.
-        </p>
-        <h3>Application improvement</h3>
-        <p>
-          Keep notation mistakes separate from tactical errors, and preserve the
-          player’s original attempt.
-        </p>
-        <p class="small-copy">
-          Production meetings will link to PGNs, exact moves, prompt versions,
-          and the independent critique transcript.
-        </p>
+        {#if diary.length}{#each diary as entry}<p style="white-space:pre-wrap">
+              {entry}
+            </p>{/each}{:else}<p>
+            No completed daily meeting yet. The first meeting will review
+            recorded training after the next cutoff.
+          </p>{/if}
+        <h3>Current plan</h3>
+        <p style="white-space:pre-wrap">{plan}</p>
       </article>
       <aside class="paper-section">
         <h2>Session events</h2>
         <p>
-          Local session events. These reset on reload; the production archive is
-          specified in the PRD.
+          {backupStatus}. Coaching records and annotated PGNs are stored in the
+          private archive.
         </p>
         <ol class="event-list">
           {#each events
@@ -848,14 +989,15 @@
           autocapitalize="off"
           autocomplete="off"
           spellcheck="false"
-        /><button class="primary-button" disabled={!candidate.trim()}
-          >Check notation</button
+        /><button
+          class="primary-button"
+          disabled={!candidate.trim() || answering}>Check candidate</button
         >
       </div>
       <p role="status">{candidateResult}</p>
     </form>
   {:else if modal === 'settings'}
-    <p>Preferences are saved in this browser.</p>
+    <p>Preferences apply to this local coach.</p>
     <form class="settings-form" onsubmit={saveSettings}>
       <label for="budget-mode">Monthly model budget</label><select
         id="budget-mode"
@@ -873,22 +1015,42 @@
       />
       <p class="small-copy">
         {budgetDraft.mode === 'hard'
-          ? 'In production, a hard cap stops new paid calls across coaching and background improvements. It can be raised or removed at any time.'
+          ? 'A hard cap stops new paid calls across coaching and background improvements. It can be raised or removed at any time.'
           : budgetDraft.mode === 'warning'
             ? 'Warn without stopping coaching or background improvements.'
             : 'No spending limit. Background improvements remain enabled.'}
       </p>
-      <div class="setting-summary">
-        <strong>Daily coaching meeting</strong><span
-          >04:00 · Australia/Sydney</span
-        ><strong>Prototype model</strong><span
-          >Deterministic mock · $0 in API calls</span
-        >
-      </div>
       <p class="small-copy">
-        Budget enforcement and scheduled meetings are production features. This
-        prototype saves your budget preference only.
+        Estimated model spend this UTC month: ${spent.toFixed(4)}. Pending
+        reservations are included; provider invoices may differ.
       </p>
+      <label for="runtime-mode">Coach</label><select
+        id="runtime-mode"
+        bind:value={mode}
+        ><option value="mock">Deterministic mock</option><option value="live"
+          >Live model + Stockfish</option
+        ></select
+      >
+      <label for="provider">Provider</label><select
+        id="provider"
+        bind:value={provider}
+        ><option value="google">Google Gemini</option><option value="fireworks"
+          >Fireworks</option
+        ></select
+      >
+      <label for="model">Model ID</label><input
+        id="model"
+        bind:value={model}
+        maxlength="180"
+      />
+      <label
+        ><input type="checkbox" bind:checked={paused} /> Pause practice</label
+      >
+      <p class="small-copy">
+        Daily meeting: 04:00 Australia/Sydney. Exposure records show visible,
+        focused, connected time; they do not measure attention. {backupStatus}.
+      </p>
+      <p class="small-copy">Application improvements: {developmentStatus}</p>
       {#if settingsError}<p class="error-text" role="alert">
           {settingsError}
         </p>{/if}<button class="primary-button"

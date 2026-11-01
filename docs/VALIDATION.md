@@ -1,57 +1,31 @@
-# Prototype verification
+# Implementation verification
 
-Verified on 1 November 2026 with Node 26.7.0 and Google Chrome through Playwright. The application runs locally at http://127.0.0.1:5173 with Hono on port 3001.
+Verified on 1–2 November 2026 (Australia/Sydney) with Node 26.7.0 and Google Chrome through Playwright. Version 0.2 retains the approved compact prototype and implements the real training path.
 
 ## Automated checks
 
-`npm run verify` passes:
+`npm run verify` passes: native TypeScript 7/Svelte checks, zero component warnings, type-aware Oxlint, 30 tests, production build, Oxfmt and the Svelte-only formatter.
 
-- Svelte component/accessibility diagnostics: zero errors and warnings, using TypeScript 7.
-- Backend/shared-code type checking: passes.
-- Type-aware Oxlint: passes with warnings disallowed.
-- Six rules/API tests: pass. Coverage includes rejected-entry immutability, ambiguity, castling, optional check suffixes, promotion, PGN setup/history, legal opponent replies, budget validation and malformed/oversized requests.
-- Vite production build: passes.
-- Oxfmt and the Svelte-only template formatter: pass.
+Tests cover SAN rejection/immutability, ambiguity/castling/checks/promotions, full-history Stockfish UCI and actual legal engine output, restricted Pi faux tool execution/native JSONL/redaction, authoritative versions/idempotency, archive paths and symlinks, local auth/Origin/control lease, PGN dedup/original bytes, atomic budget reservations, persistence/restart and private-checkpoint recovery (board/conversations/usage/events). Regression checks preserve a changed budget/pause during an engine reply and mark plain-text advice as assistance. Separate question answers are server-validated, persisted and idempotent without changing the main game.
 
-`npm run test:ui` passes twelve browser scenarios:
+Operations tests exercise QuickJS host/network/loop/memory/output denial, Sydney 04:00/DST, daily two-round critique and crash recovery, month-plus catch-up and independent development retry, real OpenTelemetry client/server traces/logs/metrics, W3C continuity, allowlisted dimensions, exact 90-day cutoff/restart/idle cleanup, dropped diagnostics/full-store behavior, protected candidate changes and preservation of external supervisor policy.
 
-1. The coach supplies the task heading; move controls are icon-only, with no opponent/new-game/download controls.
-2. Rejected notation opens guidance and preserves input, position and keyboard focus.
-3. Keyboard SAN submits a legal move, receives a legal reply and supports flipping the board.
-4. Every accepted move creates a position-linked conversation and reveals its instructions, retaining prior discussion.
-5. Demonstration steps change their rendered board, including the castled king position, without modifying the game.
-6. A separate question board validates a candidate without modifying the game.
-7. PGN and budget preferences survive reload.
-8. The coach changes the task heading/subtitle independently of board state.
-9. Scripted coach actions load a custom position/full game and toggle observation.
-10. Failed offline submission preserves state and succeeds after reconnection.
-11. Mobile move submission reveals the new coaching instructions.
-12. Layout has no horizontal overflow at 320, 390, 760, 1024 and 1440 px.
+`npm run test:ui` builds and starts an isolated temporary mock server and passes 12 scenarios: icon controls, rejected notation/focus, legal move/reply/flip, move-scoped scrolling/history, demonstrations, separate server-validated board question, durable PGN/settings across reload, dynamic task heading, coach setup/observation, offline retry, mobile instruction reveal and no horizontal overflow at 320/390/760/1024/1440px. No uncaught page errors. Screenshots were visually inspected at desktop/mobile; ignored outputs are `output/playwright/{desktop,mobile,demonstration}.png` and `checks.json`.
 
-No uncaught browser page errors occurred. Repeatable checks and screenshot capture live in `scripts/check-ui.mjs`. Artifacts are generated under `output/playwright/`: `desktop.png`, `mobile.png`, `demonstration.png` and `checks.json`. They are intentionally ignored by Git and can be regenerated.
+## Live verification
 
-The built application was also started separately with `npm start`; its HTML, bundled JavaScript asset and Hono health endpoint served successfully.
+- Supplied Gemini key loaded only in the server. Account model discovery succeeded. `gemini-3.8-flash` is listed but repeatedly timed out in direct and Pi generation checks; it is not silently selected or substituted.
+- Explicit `gemini-3-flash-preview` passed native Pi→inspect_board→Stockfish analyse_position→coaching response. Synthetic logs were deleted after checking the native session tree.
+- `node scripts/check-live.mjs` passed an actual HTTP SAN move, real Stockfish reply, real paid Pi coach response, idempotent replay, independent daily coaching meeting/acceptance protocol, native JSONL and restart recovery in a disposable archive. The meeting left the main game unchanged. Model costs are estimates; the most recent move turn was approximately $0.0054, separate from meeting calls.
+- Created `nick-boey/ChessLasso-coaching`, verified PRIVATE, then successfully committed/pushed its initial private checkpoint. The public source remains separate and `.env` is ignored.
+- Read-only final defect review identified the in-flight settings race and missing plain-chat assistance provenance; both were fixed with regression tests.
 
-## Toolchain
+## Operational limits
 
-| Tool                                             | Installed version                        |
-| ------------------------------------------------ | ---------------------------------------- |
-| Vite                                             | 8.3.5                                    |
-| Native TypeScript compiler                       | 7.0.2, installed as `@typescript/native` |
-| TypeScript compiler API required by svelte-check | 6.0.3                                    |
-| Oxlint                                           | 1.90.0                                   |
-| Oxfmt                                            | 0.75.0                                   |
-| Svelte                                           | 5.57.3                                   |
-| Svelte checker                                   | 4.7.7                                    |
+Automatic Codex implementation and release are **pending**, not operationally complete. Docker's daemon is stopped; no independently isolated coding runner or external active-use/health/rollback release adapter is configured or verified. The copied supervisor/policy remains outside the app checkout, rejects protected changes, records pending work and does not fall back to a host agent that could read private files. No autonomous rollout or rollback is claimed.
 
-The TypeScript alias follows svelte-check's documented `--tsgo` setup. Oxfmt does not format Svelte templates, so Prettier and its Svelte plugin are scoped to `.svelte` files. Plain CSS uses no styling framework.
+Fireworks, live Chess.com account import/throttling, actual phones, screen-reader operation, long-duration load, large archive recovery and 90 days of real elapsed retention have not been tested. Retention uses injected-clock boundary tests. Games currently train without clocks; imported PGNs retain supplied time controls. Small personal samples and foreground exposure cannot establish a calibrated FIDE rating or actual attention.
 
-## Visual review
+OpenTelemetry uses official SDKs plus an authenticated in-process normalized JSONL collector, rather than the originally proposed external OTLP Collector. All three signals and their 90-day contract are implemented; a general OTLP replay/query backend is not included.
 
-The Impeccable detector returned no findings. An independent finish review inspected desktop, mobile and demonstration captures against PRODUCT.md and the direction contract, returning **ship**, with no material fixes. There was no approved image comp or comparative quality-bar card; the direction service ran without catalog challengers. The approved simple application layout and later instruction to remove promotional headings governed the result.
-
-## Limits
-
-These checks establish prototype behavior, not coaching efficacy or production readiness. Real Pi/model calls, Stockfish analysis, durable coaching history, imports, private Git backups, daily meetings, billing enforcement and autonomous deployment are specified in the PRD and are not implemented here. Screenshots use reduced motion to capture settled positions. Actual phones, other browsers, screen-reader operation and long-duration load have not been tested.
-
-`npm audit` reports two low-severity development-tool findings for the same unpatched `deepmerge` advisory, through the latest Svelte Vite plugin: [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). No patched release was available during verification. The prototype binds to loopback and has no production authentication; keep it local.
+`npm audit` retains the two low development-tool findings for the existing unpatched deepmerge advisory. New Pi dependency advisories were addressed with compatible Undici 8.12.2 and tested minimatch 11.0.1 overrides; there are no known moderate/high findings in the checked lockfile. Keep development servers local.
