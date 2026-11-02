@@ -179,7 +179,7 @@ export class Runtime {
         response.fen as string | undefined,
         response.demonstration as Demonstration | undefined,
       );
-      this.save(workspace, 'position', { version: workspace.version });
+      this.save(workspace, 'position', { gameId: workspace.gameId, version: workspace.version });
       const result = {
         game: workspace.game,
         played: played.san,
@@ -215,6 +215,7 @@ export class Runtime {
     current.game = snapshot(chess);
     current.version++;
     this.save(current, 'opponent_move', {
+      gameId: current.gameId,
       san: chess.history().at(-1),
       version: current.version,
     });
@@ -576,7 +577,11 @@ export class Runtime {
         const move = playNotation(board, args.notation);
         workspace.game = snapshot(board);
         workspace.version++;
-        this.save(workspace, 'coach_move', { san: move.san, version: workspace.version });
+        this.save(workspace, 'coach_move', {
+          gameId: workspace.gameId,
+          san: move.san,
+          version: workspace.version,
+        });
         return this.state();
       }
       case 'analyze_position':

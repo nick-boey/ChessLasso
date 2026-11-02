@@ -76,3 +76,13 @@ Source is GPL-3.0-or-later; see [THIRD_PARTY.md](THIRD_PARTY.md). The portable S
 ## Known tooling advisory
 
 The latest Svelte Vite plugin currently depends on `deepmerge` with a low-severity prototype-poisoning advisory (GHSA-gcqx-w48m-w2h4); npm counts the dependency and plugin as two affected packages. No patched release was available at verification. This is build tooling using trusted local configuration, not a production API dependency. Keep development servers local.
+
+Manual meetings use `POST /api/meeting` with a JSON body:
+
+```json
+{ "day": "current" }
+```
+
+Use `"previous"` for the previous coaching day, or an explicit date such as `"2026-10-31"`. An empty body or `{}` preserves the previous-day default. Dates use the Australia/Sydney coaching window beginning at 04:00, including daylight-saving transitions; future or invalid dates return 400. The scheduled catch-up path continues to consolidate previous days.
+
+The response identifies the reviewed `day`, `status`, frozen evidence `cutoff` timestamp and event `watermark`. A current-day run includes evidence recorded before that cutoff, including a just-completed game; a cross-day game's frozen PGN supplies context while only events inside the selected window count as that day's attempts. Completed days are immutable: repeating the request returns the existing completion and cutoff, without new changes or later events. Running a current-day meeting therefore closes that day's current snapshot; it does not reopen at the next scheduled run. A busy meeting lock returns HTTP 409 with `kind: "lock_contention"`, distinct from `status: "complete"`.
