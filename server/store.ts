@@ -286,8 +286,18 @@ export class Store {
     try {
       const info = fstatSync(handle);
       if (!info.isFile()) throw new Error('Choose a record file.');
-      const buffer = Buffer.alloc(Math.min(limit, Math.max(0, info.size - offset)));
-      const bytes = readSync(handle, buffer, 0, buffer.length, offset);
+      const buffer = Buffer.alloc(Math.min(Math.max(4, limit), Math.max(0, info.size - offset)));
+      let bytes = readSync(handle, buffer, 0, buffer.length, offset);
+      // Do not split a UTF-8 character between pages (even for a one-byte requested range).
+      while (bytes > 0) {
+        try {
+          new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, bytes));
+          break;
+        } catch {
+          bytes--;
+        }
+      }
+      if (buffer.length && !bytes) throw new Error('Record is not valid UTF-8 at this offset.');
       return {
         text: buffer.subarray(0, bytes).toString('utf8'),
         offset,
@@ -440,14 +450,13 @@ export class Store {
     const start = new Date(Date.parse(day + 'T00:00:00Z') - 86400000).toISOString();
     const end = new Date(Date.parse(day + 'T00:00:00Z') + 3 * 86400000).toISOString();
     const rows = this.db
-      .prepare('SELECT * FROM events WHERE at>=? AND at<? ORDER BY id LIMIT 50001')
+      .prepare('SELECT * FROM events WHERE at>=? AND at<? ORDER BY id')
       .all(start, end) as { id: number; at: string; kind: string; value: string }[];
     return {
       events: rows
-        .slice(0, 50000)
         .filter((row) => classify(new Date(row.at)) === day)
         .map((row) => ({ ...row, value: JSON.parse(row.value) as unknown })),
-      truncated: rows.length > 50000,
+      truncated: false,
       watermark: rows.at(-1)?.id ?? 0,
     };
   }
