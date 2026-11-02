@@ -145,7 +145,15 @@
           }
         },
         "prompt": {
-          "enum": ["candidate", "reasoning", "retry", "observation", "acknowledgement", "position"]
+          "enum": [
+            "candidate",
+            "reasoning",
+            "retry",
+            "observation",
+            "acknowledgement",
+            "position",
+            "game-over"
+          ]
         }
       },
       "required": ["version", "referenceId", "verificationIds"],

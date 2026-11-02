@@ -1,6 +1,7 @@
 import type { ToolActivity } from '../src/lib/chat.js';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { Chess } from 'chess.js';
 import {
   createAgentSession,
   createExtensionRuntime,
@@ -481,14 +482,22 @@ export class CoachRuntime {
         (action) => action.name === 'start_activity' && typeof action.args.fen === 'string',
       );
       let discarded = false;
-      if (playerFacing && (boardSetup || actions.some((action) => action.name === 'play_move')))
-        discarded = refreshVerification(
-          dictionary(await this.host.invokeTool('inspect_board', {}, context)),
-        );
+      let current = context;
+      if (playerFacing && (boardSetup || actions.some((action) => action.name === 'play_move'))) {
+        const fresh = dictionary(await this.host.invokeTool('inspect_board', {}, context));
+        discarded = refreshVerification(fresh);
+        current = { ...context, ...fresh };
+      }
       const verifiedText = playerFacing ? verification.finalText(rawText) : rawText;
+      const setupText =
+        verification.root.fen === new Chess().fen()
+          ? current.quiet
+            ? 'A new independent game is ready. Choose your opening moves when it is your turn. I’ll observe until you ask for help.'
+            : 'A new game is ready. For your opening moves, think about controlling the center, developing your pieces and keeping your king safe. Which move would you like to try?'
+          : verifiedText;
       const text =
         playerFacing && boardSetup
-          ? `${describePosition(verification.root.fen, true)}\n\n${verifiedText}`
+          ? `${describePosition(verification.root.fen, true)}\n\n${setupText}`
           : verifiedText;
       if (
         playerFacing &&

@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { Runtime } from '../server/runtime.js';
 import { Store } from '../server/store.js';
 import { createApp } from '../server/app.js';
-import { gameAtPly } from '../src/lib/chess.js';
+import { Chess } from 'chess.js';
+import { gameAtPly, snapshot } from '../src/lib/chess.js';
 function runtime() {
   return new Runtime(mkdtempSync(join(tmpdir(), 'lasso-runtime-')));
 }
@@ -36,6 +37,94 @@ void test('tool activity updates one durable row per call without colliding with
     app.store.close();
   }
 });
+void test('a loss during observation gets a game-over handoff without resetting the final board', async () => {
+  const app = runtime();
+  try {
+    const board = new Chess();
+    board.move('f3');
+    board.move('e5');
+    const workspace = app.store.workspace();
+    workspace.game = snapshot(board);
+    workspace.mode = 'live';
+    workspace.quiet = true;
+    app.store.save(workspace);
+    app.engine = { play: async () => 'd8h4', analyze: async () => ({}) };
+    await app.move('g4', workspace.version, 'losing-move');
+    const saved = app.store.workspace();
+    const text = saved.conversations.at(-1)?.messages.at(-1)?.text ?? '';
+    assert.match(text, /Black won by checkmate/);
+    assert.match(text, /review.*next activity/i);
+    assert.equal(saved.game.over, true);
+    assert.equal(saved.gameId, workspace.gameId);
+    assert.equal(saved.game.moves.at(-1), 'Qh4#');
+    assert.equal(saved.activity.heading, 'Game complete');
+    const messageCount = saved.conversations.flatMap((entry) => entry.messages).length;
+    await app.move('g4', workspace.version, 'losing-move');
+    assert.equal(
+      app.store.workspace().conversations.flatMap((entry) => entry.messages).length,
+      messageCount,
+    );
+    await app.chat('Resume coaching and help again', saved.version, 'resume-after-loss');
+    const resumed = app.store.workspace();
+    assert.equal(resumed.quiet, false);
+    assert.equal(resumed.gameId, saved.gameId);
+    assert.deepEqual(resumed.game, saved.game);
+    assert.match(
+      resumed.conversations.at(-1)?.messages.at(-1)?.text ?? '',
+      /Black won by checkmate/,
+    );
+    const directory = app.store.directory;
+    app.store.close();
+    const restored = new Runtime(directory);
+    try {
+      assert.equal(restored.store.workspace().game.over, true);
+      assert.deepEqual(restored.store.workspace(), resumed);
+    } finally {
+      restored.store.close();
+    }
+  } finally {
+    // The successful path closes before the restart assertion.
+    if (app.store.db.isOpen) app.store.close();
+  }
+});
+for (const scenario of [
+  {
+    name: 'a player win',
+    fen: undefined,
+    moves: ['f3', 'e5', 'g4'],
+    side: 'b',
+    move: 'Qh4#',
+    result: /Black won by checkmate/,
+  },
+  {
+    name: 'an insufficient-material draw',
+    fen: '7k/8/8/8/8/8/2r5/KB6 w - - 0 1',
+    moves: [],
+    side: 'w',
+    move: 'Bxc2',
+    result: /drawn by insufficient material/,
+  },
+] as const) {
+  void test(`${scenario.name} gets a terminal handoff without requiring a model call`, async () => {
+    const app = runtime();
+    try {
+      const board = new Chess(scenario.fen);
+      for (const move of scenario.moves) board.move(move);
+      const workspace = app.store.workspace();
+      workspace.game = snapshot(board);
+      workspace.mode = 'live';
+      workspace.quiet = false;
+      workspace.playerSide = scenario.side;
+      app.store.save(workspace);
+      await app.move(scenario.move, workspace.version, 'terminal-move');
+      const saved = app.store.workspace();
+      assert.equal(saved.game.over, true);
+      assert.match(saved.conversations.at(-1)?.messages.at(-1)?.text ?? '', scenario.result);
+    } finally {
+      app.store.close();
+    }
+  });
+}
 void test('journal exposes saved Markdown and complete diary files newest first', async () => {
   const app = runtime();
   try {

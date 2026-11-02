@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Chess, type Square } from 'chess.js';
-import { playNotation } from '../src/lib/chess.js';
+import { loadGame, playNotation } from '../src/lib/chess.js';
 import { boardFacts, positionReference, type PositionReference } from './board-facts.js';
 import { analysePosition, type EngineRequest, type EngineResult } from './engine.js';
 
@@ -34,6 +34,21 @@ const neutralPrompts = {
   observation: 'Take your time. I will wait for your move.',
   acknowledgement: 'Your request is recorded. Choose a candidate move when you are ready.',
 };
+/** Report the actual result without relying on the model or supplying a move hint. */
+export function describeGameOver(pgn: string) {
+  const board = loadGame(pgn);
+  if (!board.isGameOver()) throw new VerificationError('false-claim', 'This game has not ended.');
+  const result = board.isCheckmate()
+    ? `${board.turn() === 'w' ? 'Black' : 'White'} won by checkmate.`
+    : board.isStalemate()
+      ? 'The game is drawn by stalemate.'
+      : board.isInsufficientMaterial()
+        ? 'The game is drawn by insufficient material.'
+        : board.isThreefoldRepetition()
+          ? 'The game is drawn by threefold repetition.'
+          : 'The game is drawn by the fifty-move rule.';
+  return `Game over. ${result}\n\nWould you like to review the finish or choose your next activity?`;
+}
 /** Explain setup using the board itself, without relying on provider-authored chess claims. */
 export function describePosition(fen: string, changed = false) {
   const board = new Chess(fen);
@@ -268,9 +283,11 @@ export class CoachingVerification {
     const prompt =
       args.prompt === 'position'
         ? describePosition(this.root.fen)
-        : args.prompt === undefined
-          ? ''
-          : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
+        : args.prompt === 'game-over'
+          ? describeGameOver(this.context.pgn)
+          : args.prompt === undefined
+            ? ''
+            : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
     if (prompt === undefined)
       throw new VerificationError('unverified-output', 'Choose a supported teaching prompt.');
     if (

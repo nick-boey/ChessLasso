@@ -18,6 +18,7 @@ import { Backup } from './backup.js';
 import { searchArchive } from './sandbox.js';
 import { meetingAction } from './meeting-actions.js';
 import { boardFacts } from './board-facts.js';
+import { describeGameOver } from './verification.js';
 
 export class Runtime {
   store: Store;
@@ -134,7 +135,11 @@ export class Runtime {
       workspace = this.store.workspace();
       let note = '';
       let response: Record<string, unknown> = {};
-      if (!workspace.quiet) {
+      if (workspace.game.over) {
+        note = describeGameOver(workspace.game.pgn);
+        workspace.activity = { heading: 'Game complete', subtitle: workspace.game.status };
+        this.store.save(workspace);
+      } else if (!workspace.quiet) {
         if (workspace.mode === 'live' && this.coach) {
           try {
             const result = await this.paid(
@@ -322,7 +327,12 @@ export class Runtime {
       });
       this.store.save(workspace);
       let result: Record<string, unknown>;
-      if (workspace.mode === 'live')
+      // The Resume quick action changes feedback policy, not the completed game's position.
+      if (!reviewed && workspace.game.over && message === 'Resume coaching and help again') {
+        workspace.quiet = false;
+        this.store.save(workspace);
+        result = { text: describeGameOver(workspace.game.pgn) };
+      } else if (workspace.mode === 'live')
         result = {
           ...(await this.paid(
             message,
