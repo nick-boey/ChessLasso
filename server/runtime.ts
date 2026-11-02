@@ -15,6 +15,7 @@ import { redactCoachText, type CoachRuntime, type CoachRole } from './coach.js';
 import fixture from '../config/mock-coach.json' with { type: 'json' };
 import { Backup } from './backup.js';
 import { searchArchive } from './sandbox.js';
+import { boardFacts } from './board-facts.js';
 
 export class Runtime {
   store: Store;
@@ -225,6 +226,7 @@ export class Runtime {
     return {
       fen: game.fen,
       pgn: game.pgn,
+      boardFacts: boardFacts(game.fen, version),
       version,
       gameId,
       activity,
@@ -461,7 +463,12 @@ export class Runtime {
       return { text: fixture.feedback, action: 'feedback' };
     return { text: fixture.default, action: 'question', fen: this.store.workspace().game.fen };
   }
-  async tool(name: string, args: Record<string, unknown>, runRole = 'coach') {
+  async tool(
+    name: string,
+    args: Record<string, unknown>,
+    runRole = 'coach',
+    context?: { fen: string; pgn: string; version: number },
+  ) {
     if (
       runRole !== 'coach' &&
       ['propose_record_update', 'revise_prompt', 'propose_app_change'].includes(name)
@@ -481,8 +488,18 @@ export class Runtime {
     switch (name) {
       case 'inspect_board':
       case 'get_position':
-      case 'get_context':
-        return this.coachContext();
+      case 'get_context': {
+        if (context && context.version !== workspace.version) throw new ConflictError();
+        if (args.version !== undefined && args.version !== workspace.version)
+          throw new ConflictError();
+        return context
+          ? {
+              ...this.coachContext(),
+              ...context,
+              boardFacts: boardFacts(context.fen, context.version),
+            }
+          : this.coachContext();
+      }
       case 'set_activity':
       case 'start_activity': {
         if (

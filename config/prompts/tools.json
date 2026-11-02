@@ -2,10 +2,15 @@
   {
     "name": "inspect_board",
     "label": "Inspect board",
-    "description": "Read the authoritative board, version, move history and activity. Use the returned version for mutations.",
+    "description": "Read deterministic boardFacts for the referenced current, historical or question position. Includes geometric attacks, defenders, sliding blockers, relative/absolute pins, legal moves and king escapes. Facts are tied to full FEN and version; never reuse after a position change. Attacks and pins are not legal moves. Inspection does not authorize revealing hints in observation mode; record assistance before disclosure.",
     "parameters": {
       "type": "object",
-      "properties": {},
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
       "additionalProperties": false
     }
   },
