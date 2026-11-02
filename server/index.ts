@@ -1,3 +1,4 @@
+import { registerManualMeeting } from './manual-meeting.js';
 import { resolve, join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -19,7 +20,7 @@ const [
   { Runtime },
   { CoachRuntime },
   { analysePosition },
-  { DailyJobs, coachingDay, previousDay },
+  { DailyJobs, coachingDay },
 ] = await Promise.all([
   import('./app.js'),
   import('./runtime.js'),
@@ -102,9 +103,7 @@ runtime.store.put('first-day', firstDay);
 const stopJobs = jobs.start(firstDay, (error) => {
   runtime.store.put('job-error', { at: new Date().toISOString(), error: String(error) });
 });
-app.post('/api/meeting', async (c) =>
-  c.json(await jobs.runDay(previousDay(coachingDay(new Date())))),
-);
+registerManualMeeting(app, jobs);
 app.use('/*', serveStatic({ root: './dist' }));
 app.get('*', serveStatic({ path: './dist/index.html' }));
 const backupTimer = setInterval(() => void runtime.backup.checkpoint(), 5 * 60_000);
