@@ -13,7 +13,7 @@ function runtime() {
 void test('journal exposes saved Markdown and complete diary files newest first', async () => {
   const app = runtime();
   try {
-    const api = createApp(app);
+    const api = createApp(app, { authentication: false });
     const empty = await (await api.request('/api/journal')).json();
     assert.equal(empty.notes, '');
     assert.deepEqual(empty.entries, []);
