@@ -10,6 +10,35 @@ import { gameAtPly } from '../src/lib/chess.js';
 function runtime() {
   return new Runtime(mkdtempSync(join(tmpdir(), 'lasso-runtime-')));
 }
+void test('journal exposes saved Markdown and complete diary files newest first', async () => {
+  const app = runtime();
+  try {
+    const api = createApp(app, { authentication: false });
+    const empty = await (await api.request('/api/journal')).json();
+    assert.equal(empty.notes, '');
+    assert.deepEqual(empty.entries, []);
+    app.store.write('games/coach-notes.md', '## Development\n\n**Check king safety.**');
+    app.store.write('diary/2026-11-01.md', '# Reflection\n\n- Compare candidates');
+    app.store.write(
+      'diary/2026-11-02.md',
+      '# Meeting\n\nAccepted diary updates:\nKeep calculating.',
+    );
+    app.store.write('diary/draft.md', 'Not a dated diary entry');
+    const response = await api.request('/api/journal');
+    assert.equal(response.status, 200);
+    const journal = await response.json();
+    assert.equal(journal.notes, app.store.read('games/coach-notes.md'));
+    assert.equal(journal.profile, app.store.read('profile/current.md'));
+    assert.equal(journal.plan, app.store.read('plans/current.md'));
+    assert.deepEqual(
+      journal.entries.map((entry: { day: string }) => entry.day),
+      ['2026-11-02', '2026-11-01'],
+    );
+    assert.match(journal.entries[0].text, /Accepted diary updates/);
+  } finally {
+    app.store.close();
+  }
+});
 void test('accepted move, immutable conversations and archive survive restart', async () => {
   const app = runtime();
   const state = app.store.workspace();

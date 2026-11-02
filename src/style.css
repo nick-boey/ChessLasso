@@ -630,20 +630,40 @@
     color: var(--muted);
     margin-top: 5px;
   }
-  .journal-meta {
+  .journal-heading {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
-    color: var(--muted);
-    font-size: 10px;
-    margin-bottom: 18px;
   }
-  .journal-entry blockquote {
-    padding: 18px;
-    margin: 15px 0;
-    background: #eff4ec;
-    color: #3b5c42;
-    border-radius: 7px;
+  .journal-heading h1 {
+    font-size: 20px;
+    margin: 0;
+  }
+  .journal-entry {
+    min-width: 0;
+  }
+  .journal-section {
+    border-top: 1px solid var(--line);
+    margin-top: 24px;
+    padding-top: 20px;
+  }
+  .journal-section > h2 {
+    margin-bottom: 12px;
+  }
+  .journal-entry .message-content {
+    font-size: 14px;
+    line-height: 1.7;
+    max-width: 70ch;
+  }
+  .journal-entry .message-content :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: 16px;
+  }
+  .diary-entry + .diary-entry {
+    border-top: 1px solid var(--line);
+    margin-top: 20px;
+    padding-top: 4px;
   }
   .event-list {
     list-style: none;
@@ -897,6 +917,12 @@
   }
   h1 {
     font-size: 25px;
+  }
+  .journal-heading h1 {
+    font-size: 20px;
+  }
+  .journal-entry .message-content h1 {
+    font-size: 1em;
   }
   .practice-layout,
   .reading-layout {

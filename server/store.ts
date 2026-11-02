@@ -490,6 +490,24 @@ export class Store {
     }
     if (rows.length) this.put('archive-watermark', rows.at(-1)!.id);
   }
+  journal() {
+    const directory = 'diary';
+    const entries = existsSync(this.path(directory))
+      ? readdirSync(this.path(directory), { withFileTypes: true })
+          .filter((entry) => entry.isFile() && /^\d{4}-\d{2}-\d{2}\.md$/.test(entry.name))
+          .sort((a, b) => b.name.localeCompare(a.name))
+          .map((entry) => ({
+            day: entry.name.slice(0, -3),
+            text: this.read(`${directory}/${entry.name}`),
+          }))
+      : [];
+    return {
+      notes: existsSync(this.path('games/coach-notes.md')) ? this.read('games/coach-notes.md') : '',
+      profile: this.read('profile/current.md'),
+      plan: this.read('plans/current.md'),
+      entries,
+    };
+  }
   stats() {
     const count = (kind: string) =>
       Number(

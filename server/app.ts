@@ -94,6 +94,7 @@ export function createApp(
     c.json({ ok: true, mode: runtime.store.workspace().mode, version: '0.2.0' }),
   );
   app.get('/api/state', (c) => c.json(runtime.state()));
+  app.get('/api/journal', (c) => c.json(runtime.store.journal()));
   app.post('/api/move', async (c) => {
     const body = await c.req.json();
     if (
