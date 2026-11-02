@@ -4,6 +4,7 @@
     size = 20,
   }: {
     name:
+      | 'down'
       | 'arrow'
       | 'book'
       | 'close'
@@ -19,6 +20,7 @@
     size?: number;
   } = $props();
   const paths = {
+    down: 'M12 5v14m-6-6 6 6 6-6',
     arrow: 'M5 12h14m-6-6 6 6-6 6',
     book: 'M12 5v15M3 4c4-1 6 0 9 2 3-2 5-3 9-2v15c-4-1-6 0-9 2-3-2-5-3-9-2Z',
     close: 'm6 6 12 12M6 18 18 6',

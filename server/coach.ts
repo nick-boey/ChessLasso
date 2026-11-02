@@ -1,3 +1,4 @@
+import type { ToolActivity } from '../src/lib/chat.js';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
@@ -169,8 +170,13 @@ export class CoachRuntime {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private host: CoachHost) {}
 
-  run(message: string, context: CoachContext, role: CoachRole = 'coach'): Promise<CoachResult> {
-    const pending = this.queue.then(() => this.runTurn(message, context, role));
+  run(
+    message: string,
+    context: CoachContext,
+    role: CoachRole = 'coach',
+    onToolActivity?: (activity: ToolActivity) => void,
+  ): Promise<CoachResult> {
+    const pending = this.queue.then(() => this.runTurn(message, context, role, onToolActivity));
     this.queue = pending.catch(() => undefined);
     return pending;
   }
@@ -179,6 +185,7 @@ export class CoachRuntime {
     message: string,
     context: CoachContext,
     role: CoachRole,
+    onToolActivity?: (activity: ToolActivity) => void,
   ): Promise<CoachResult> {
     if (!message.trim() || message.length > 48000)
       throw new CoachFailure('input_size', 'Coach message exceeds its limit.');
@@ -303,6 +310,8 @@ export class CoachRuntime {
         }
         if (signal?.aborted) throw new Error('Coach tool cancelled.');
         let args = redactValue(dictionary(raw));
+        const activity = { id: crypto.randomUUID(), name: tool.name };
+        onToolActivity?.({ ...activity, status: 'running' });
         this.host.onEvent?.({ type: 'tool_start', tool: tool.name });
         const readKey =
           role !== 'coach' &&
@@ -356,6 +365,7 @@ export class CoachRuntime {
             result = await this.host.invokeTool(tool.name, args, context);
           }
         } catch (error) {
+          onToolActivity?.({ ...activity, status: 'error' });
           if (error instanceof VerificationError)
             await this.host.invokeTool(
               'record_verification_failure',
@@ -371,8 +381,12 @@ export class CoachRuntime {
         result = redactValue(result);
         if (readKey) cachedReads.set(readKey, result);
         const encoded = JSON.stringify(result ?? null);
-        if (encoded.length > 96000) throw new Error('Tool result exceeded its limit.');
+        if (encoded.length > 96000) {
+          onToolActivity?.({ ...activity, status: 'error' });
+          throw new Error('Tool result exceeded its limit.');
+        }
         actions.push({ name: tool.name, args, result });
+        onToolActivity?.({ ...activity, status: 'complete' });
         this.host.onEvent?.({ type: 'tool_end', tool: tool.name });
         return { content: [{ type: 'text', text: encoded }], details: {} };
       },

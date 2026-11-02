@@ -10,6 +10,32 @@ import { gameAtPly } from '../src/lib/chess.js';
 function runtime() {
   return new Runtime(mkdtempSync(join(tmpdir(), 'lasso-runtime-')));
 }
+void test('tool activity updates one durable row per call without colliding with chat IDs', async () => {
+  const app = runtime();
+  try {
+    let notifications = 0;
+    app.listeners.add(() => notifications++);
+    app.recordToolActivity({ id: 'read-1', name: 'inspect_board', status: 'running' });
+    app.recordToolActivity({ id: 'read-1', name: 'inspect_board', status: 'complete' });
+    app.recordToolActivity({ id: 'read-2', name: 'read_history', status: 'error' });
+    await app.chat('Hello coach', app.store.workspace().version, 'chat-with-tools');
+    const messages = app.state().conversations.flatMap((item) => item.messages);
+    assert.equal(new Set(messages.map((item) => item.id)).size, messages.length);
+    assert.deepEqual(
+      messages.filter((item) => item.role === 'tool').map((item) => item.tool),
+      [
+        { id: 'read-1', name: 'inspect_board', status: 'complete' },
+        { id: 'read-2', name: 'read_history', status: 'error' },
+      ],
+    );
+    assert.ok(notifications >= 3);
+    const reopened = new Store(app.store.directory);
+    assert.deepEqual(reopened.workspace().conversations, app.state().conversations);
+    reopened.close();
+  } finally {
+    app.store.close();
+  }
+});
 void test('journal exposes saved Markdown and complete diary files newest first', async () => {
   const app = runtime();
   try {

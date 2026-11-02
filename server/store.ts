@@ -1,3 +1,4 @@
+import type { ToolActivity } from '../src/lib/chat.js';
 import { DatabaseSync } from 'node:sqlite';
 import {
   mkdirSync,
@@ -28,7 +29,8 @@ import defaults from '../config/mock-coach.json' with { type: 'json' };
 
 export interface Message {
   id: number;
-  role: 'coach' | 'player';
+  role: 'coach' | 'player' | 'tool';
+  tool?: ToolActivity;
   text: string;
   action?: string;
   fen?: string;

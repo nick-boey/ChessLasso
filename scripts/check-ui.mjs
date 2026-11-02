@@ -51,8 +51,9 @@ const chat = page.getByRole('textbox', { name: 'Message your coach' });
 const send = async (text) => {
   await chat.fill(text);
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
-  await page.getByRole('button', { name: 'Hint', exact: true }).waitFor({ state: 'visible' });
-  await page.waitForFunction(() => !document.querySelector('.quick-actions button')?.disabled);
+  await page.waitForFunction(
+    () => document.querySelector('#chat').value === '' && !document.querySelector('.thinking'),
+  );
 };
 
 try {
@@ -176,7 +177,8 @@ try {
     'Every accepted move creates a position-linked conversation and scrolls its instructions into view',
   );
 
-  await page.getByRole('button', { name: 'Example', exact: true }).click();
+  await chat.fill('Show me an example');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   await page.getByRole('button', { name: 'Go to step 4', exact: true }).click();
   assert.match(await page.getByRole('dialog').innerText(), /Get the king safe/);
@@ -226,7 +228,36 @@ try {
     const response = await route.fetch();
     const body = await response.json();
     body.text = markdown;
-    body.workspace.conversations.at(-1).messages.at(-1).text = markdown;
+    const messages = body.workspace.conversations.at(-1).messages;
+    messages.at(-1).text = markdown;
+    const nextId =
+      Math.max(
+        ...body.workspace.conversations.flatMap((item) =>
+          item.messages.map((message) => message.id),
+        ),
+      ) + 1;
+    messages.splice(
+      messages.length - 1,
+      0,
+      {
+        id: nextId,
+        role: 'tool',
+        text: '',
+        tool: { id: 'board', name: 'inspect_board', status: 'complete' },
+      },
+      {
+        id: nextId + 1,
+        role: 'tool',
+        text: '',
+        tool: { id: 'position', name: 'set_position', status: 'running' },
+      },
+      {
+        id: nextId + 2,
+        role: 'tool',
+        text: '',
+        tool: { id: 'notes', name: 'read_history', status: 'error' },
+      },
+    );
     requestStarted();
     await replyGate;
     await route.fulfill({ response, json: body });
@@ -269,14 +300,35 @@ try {
   );
   assert.equal(await page.evaluate(() => window.markdownExecuted), undefined);
   await page.waitForFunction(() => {
-    const feed = document.querySelector('.transcript').getBoundingClientRect();
-    const current = document
-      .querySelector('.move-conversation:last-child .message:last-child')
-      .getBoundingClientRect();
-    return Math.abs(current.top - feed.top - 8) < 2;
+    const feed = document.querySelector('.transcript');
+    return feed.scrollHeight - feed.scrollTop - feed.clientHeight <= 8;
   });
+  assert.equal(await page.locator('.quick-actions').count(), 0);
+  assert.equal(await page.locator('.tool-row').count(), 3);
+  assert.match(await page.locator('.tool-row').nth(0).innerText(), /Read board/);
+  assert.match(await page.locator('.tool-row').nth(1).innerText(), /Changed position.*Running/s);
+  assert.match(await page.locator('.tool-row').nth(2).innerText(), /Read coaching notes.*Failed/s);
+  const bottomButton = page.getByRole('button', { name: 'Scroll to bottom', exact: true });
+  await bottomButton.waitFor({ state: 'hidden' });
+  await page.locator('.transcript').evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await bottomButton.waitFor();
+  await bottomButton.click();
+  await bottomButton.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => {
+    const feed = document.querySelector('.transcript');
+    return feed.scrollHeight - feed.scrollTop - feed.clientHeight <= 8;
+  });
+  passed.push(
+    'Tool calls render separate status rows and scrolling up reveals a working bottom button',
+  );
   await page.screenshot({ path: `${output}/markdown-desktop.png` });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const feed = document.querySelector('.transcript');
+    return feed.scrollHeight - feed.scrollTop - feed.clientHeight <= 8;
+  });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.ok(await formatted.evaluate((element) => element.scrollWidth <= element.clientWidth));
   await page.screenshot({ path: `${output}/markdown-mobile.png`, fullPage: true });
@@ -290,9 +342,7 @@ try {
     return current.top >= feed.top && current.bottom <= feed.bottom;
   });
   passed.push('Chat Markdown formats both roles, sanitizes unsafe content and fits mobile');
-  passed.push(
-    'Each sent message and coach reply scrolls into view, including long replies within one move',
-  );
+  passed.push('Each sent message and coach reply scrolls to the bottom, including long replies');
 
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   await page.getByLabel('Monthly model budget').selectOption('hard');
@@ -324,8 +374,8 @@ try {
   );
   await send('Start a new game');
   assert.equal((await stored()).quiet, true);
-  await page.getByRole('button', { name: 'Resume coaching', exact: true }).click();
-  await page.getByRole('button', { name: 'Observe', exact: true }).waitFor();
+  await send('Resume coaching and help again');
+  assert.equal((await stored()).quiet, false);
   passed.push(
     'Coach setup actions load a custom position/full game and observation can be resumed',
   );

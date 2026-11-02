@@ -4,6 +4,7 @@
   import Board from './lib/Board.svelte';
   import Icon from './lib/Icon.svelte';
   import Markdown from './lib/Markdown.svelte';
+  import { toolLabel, type ToolActivity } from './lib/chat';
   import Journal from './lib/Journal.svelte';
   import {
     loadGame,
@@ -19,7 +20,8 @@
   type Modal = 'guide' | 'demo' | 'settings' | 'question' | null;
   type Message = {
     id: number;
-    role: 'coach' | 'player';
+    role: 'coach' | 'player' | 'tool';
+    tool?: ToolActivity;
     text: string;
     action?: string;
     fen?: string;
@@ -125,6 +127,9 @@
   let dialog = $state<HTMLDialogElement>();
   let moveInput = $state<HTMLInputElement>();
   let transcript = $state<HTMLDivElement>();
+  let transcriptContent = $state<HTMLDivElement>();
+  let atBottom = $state(true);
+  let toolRevision = 0;
   let coachPanel = $state<HTMLElement>();
   let step = $state(0);
   let questionFen = $state(practiceGame().fen);
@@ -144,37 +149,45 @@
     return board.fen();
   });
 
-  let lastShownMessage = '';
   $effect(() => {
-    const conversation = conversations.at(-1);
-    const key = `${conversation?.id}:${conversation?.messages.at(-1)?.id}`;
-    if (ready && page === 'today' && transcript && key !== lastShownMessage) {
-      lastShownMessage = key;
-      void showLatestMessage();
-    }
+    // Track content, status and position updates, including tool-only turns.
+    const content = JSON.stringify({ conversations, thinking });
+    if (content && ready && page === 'today' && transcript)
+      void scrollToBottom();
   });
 
-  async function showLatestMessage() {
+  $effect(() => {
+    if (!transcript || !transcriptContent) return;
+    const observer = new ResizeObserver(() => {
+      if (atBottom && transcript)
+        transcript.scrollTo({
+          top: transcript.scrollHeight,
+          behavior: 'instant',
+        });
+      updateScrollPosition();
+    });
+    observer.observe(transcript);
+    observer.observe(transcriptContent);
+    return () => observer.disconnect();
+  });
+
+  function updateScrollPosition() {
+    if (transcript)
+      atBottom =
+        transcript.scrollHeight -
+          transcript.scrollTop -
+          transcript.clientHeight <=
+        8;
+  }
+
+  async function scrollToBottom() {
     await tick();
-    const conversation = transcript?.querySelector<HTMLElement>(
-      '.move-conversation:last-child',
-    );
-    const current =
-      conversation?.querySelector<HTMLElement>('.message:last-child') ??
-      conversation;
+    transcript?.scrollTo({ top: transcript.scrollHeight, behavior: 'instant' });
+    updateScrollPosition();
     const behavior = window.matchMedia('(prefers-reduced-motion: reduce)')
       .matches
       ? 'instant'
       : 'smooth';
-    if (current && transcript)
-      transcript.scrollTo({
-        top:
-          transcript.scrollTop +
-          current.getBoundingClientRect().top -
-          transcript.getBoundingClientRect().top -
-          8,
-        behavior,
-      });
     if (window.innerWidth < 760)
       coachPanel?.scrollIntoView({ block: 'nearest', behavior });
   }
@@ -282,6 +295,12 @@
     const stream = new EventSource('/api/stream');
     stream.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      if (data.toolRevision !== toolRevision) {
+        toolRevision = data.toolRevision;
+        revision = data.revision;
+        void refresh();
+        return;
+      }
       if (
         (data.version !== version || data.revision !== revision) &&
         !busy &&
@@ -709,83 +728,105 @@
           </div>
           <span class="availability-dot" aria-label="Coach available"></span>
         </div>
-        <div
-          class="transcript"
-          bind:this={transcript}
-          aria-live="polite"
-          aria-label="Conversation"
-        >
-          {#each conversations as conversation (conversation.id)}
-            <section
-              class="move-conversation"
-              data-conversation={conversation.id}
-              aria-label={`Position after ${conversation.label}`}
-            >
-              <div class="move-context">
-                <span>{conversation.label}</span
-                >{#if !conversation.messages.length}<span>Observing</span>{/if}
-              </div>
-              {#each conversation.messages as message (message.id)}
-                <div
-                  class:from-player={message.role === 'player'}
-                  class="message"
+        <div class="transcript-container">
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable chat must support keyboard scrolling.) -->
+          <div
+            class="transcript"
+            bind:this={transcript}
+            onscroll={updateScrollPosition}
+            role="log"
+            tabindex="0"
+            aria-live="polite"
+            aria-label="Conversation"
+          >
+            <div bind:this={transcriptContent}>
+              {#each conversations as conversation (conversation.id)}
+                <section
+                  class="move-conversation"
+                  data-conversation={conversation.id}
+                  aria-label={`Position after ${conversation.label}`}
                 >
-                  <span class="message-author"
-                    >{message.role === 'coach' ? 'Coach' : 'You'}</span
-                  >
-                  <Markdown text={message.text} />
-                  {#if message.action === 'demonstrate'}<button
-                      class="example-link"
-                      onclick={() => {
-                        if (message.demonstration) demo = message.demonstration;
-                        step = 0;
-                        modal = 'demo';
-                      }}
-                      ><Icon name="play" size={16} /> Reopen the example <Icon
-                        name="chevron"
-                        size={15}
-                      /></button
-                    >{/if}
-                  {#if message.action === 'question' && message.fen}<button
-                      class="example-link"
-                      onclick={() => {
-                        questionFen = message.fen!;
-                        questionMessageId = message.id;
-                        candidate = '';
-                        candidateResult = '';
-                        modal = 'question';
-                      }}
-                      ><Icon name="book" size={16} /> Open question board <Icon
-                        name="chevron"
-                        size={15}
-                      /></button
-                    >{/if}
-                </div>
+                  <div class="move-context">
+                    <span>{conversation.label}</span
+                    >{#if !conversation.messages.length}<span>Observing</span
+                      >{/if}
+                  </div>
+                  {#each conversation.messages as message (message.id)}
+                    {#if message.role === 'tool' && message.tool}
+                      <div class="tool-row" data-status={message.tool.status}>
+                        <Icon
+                          name={message.tool.status === 'complete'
+                            ? 'check'
+                            : message.tool.status === 'error'
+                              ? 'close'
+                              : 'settings'}
+                          size={14}
+                        />
+                        <span>{toolLabel(message.tool.name)}</span>
+                        {#if message.tool.status === 'running'}<span
+                            class="tool-status">Running…</span
+                          >{/if}
+                        {#if message.tool.status === 'error'}<span
+                            class="tool-status">Failed</span
+                          >{/if}
+                      </div>
+                    {:else}
+                      <div
+                        class:from-player={message.role === 'player'}
+                        class="message"
+                      >
+                        <span class="message-author"
+                          >{message.role === 'coach' ? 'Coach' : 'You'}</span
+                        >
+                        <Markdown text={message.text} />
+                        {#if message.action === 'demonstrate'}<button
+                            class="example-link"
+                            onclick={() => {
+                              if (message.demonstration)
+                                demo = message.demonstration;
+                              step = 0;
+                              modal = 'demo';
+                            }}
+                            ><Icon name="play" size={16} /> Reopen the example <Icon
+                              name="chevron"
+                              size={15}
+                            /></button
+                          >{/if}
+                        {#if message.action === 'question' && message.fen}<button
+                            class="example-link"
+                            onclick={() => {
+                              questionFen = message.fen!;
+                              questionMessageId = message.id;
+                              candidate = '';
+                              candidateResult = '';
+                              modal = 'question';
+                            }}
+                            ><Icon name="book" size={16} /> Open question board <Icon
+                              name="chevron"
+                              size={15}
+                            /></button
+                          >{/if}
+                      </div>
+                    {/if}
+                  {/each}
+                </section>
               {/each}
-            </section>
-          {/each}
-          {#if thinking}<p class="thinking" role="status">
-              Preparing response…
-            </p>{/if}
+              {#if thinking}<p class="thinking" role="status">
+                  Preparing response…
+                </p>{/if}
+            </div>
+          </div>
+          {#if !atBottom}
+            <button
+              class="scroll-to-bottom"
+              aria-label="Scroll to bottom"
+              onclick={() => scrollToBottom()}
+            >
+              <Icon name="down" size={16} /> Scroll to bottom
+            </button>
+          {/if}
         </div>
         <div class="chat-controls">
-          <div class="quick-actions">
-            <button
-              disabled={thinking || busy}
-              onclick={() => sendMessage('Give me a hint')}>Hint</button
-            ><button
-              disabled={thinking || busy}
-              onclick={() =>
-                sendMessage(
-                  quiet
-                    ? 'Resume coaching and help again'
-                    : 'Let me keep thinking quietly',
-                )}>{quiet ? 'Resume coaching' : 'Observe'}</button
-            ><button
-              disabled={thinking || busy}
-              onclick={() => sendMessage('Show me an example')}>Example</button
-            >
-          </div>
           <form
             class="chat-form"
             onsubmit={(event) => {
