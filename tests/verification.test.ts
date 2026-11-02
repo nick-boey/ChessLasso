@@ -48,6 +48,148 @@ function setup(fen = new Chess().fen(), version = 3) {
   return { verifier, args: { version, referenceId: verifier.root.id } };
 }
 
+void test('a coach board reset explains the new starting position alongside its verified reply', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'lasso-reset-'));
+  const host = new Runtime(directory);
+  try {
+    const workspace = host.store.workspace();
+    workspace.game = snapshot(new Chess('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'));
+    workspace.mode = 'live';
+    host.store.save(workspace);
+    let claimId = '';
+    host.coach = new CoachRuntime({
+      sessionsDir: host.sessionDirectory(),
+      getSettings: () => ({ mode: 'mock', provider: 'google', model: 'gemini-3.8-flash' }),
+      getPrompt: async () => ({ text: 'Use checked coaching.', version: 'test' }),
+      invokeTool: (name, args, current) => host.tool(name, args, 'coach', current),
+      mockResponses: () => [
+        fauxAssistantMessage(
+          fauxToolCall('start_activity', {
+            version: workspace.version,
+            fen: new Chess().fen(),
+            quiet: true,
+          }),
+        ),
+        fauxAssistantMessage(fauxToolCall('inspect_board', {})),
+        () => {
+          const context = host.coachContext();
+          return fauxAssistantMessage(
+            fauxToolCall('verify_claims', {
+              version: context.version,
+              referenceId: context.boardFacts.reference.id,
+              claims: [{ kind: 'attack', from: 'e2', to: 'd3' }],
+            }),
+          );
+        },
+        (transcript) => {
+          const last = transcript.messages.at(-1);
+          assert.equal(last?.role, 'toolResult');
+          const encoded = last?.content.find((part) => part.type === 'text');
+          assert.equal(encoded?.type, 'text');
+          claimId = (JSON.parse(encoded!.text) as { id: string }).id;
+          const context = host.coachContext();
+          return fauxAssistantMessage(
+            fauxToolCall('publish_coaching', {
+              version: context.version,
+              referenceId: context.boardFacts.reference.id,
+              verificationIds: [claimId],
+              prompt: 'candidate',
+            }),
+          );
+        },
+        fauxAssistantMessage('Invented tactical instructions must remain hidden.'),
+      ],
+    });
+    const response = await host.chat('Let’s continue', workspace.version, 'continue-after-mate');
+    const saved = host.store.workspace();
+    const text = saved.conversations.at(-1)?.messages.at(-1)?.text;
+    assert.ok(text);
+    assert.equal(saved.game.fen, new Chess().fen());
+    assert.match(text, /reset.*standard starting position/i);
+    assert.match(text, /White to move/);
+    assert.match(text, /e2 geometrically attacks d3/);
+    assert.doesNotMatch(text, /Invented tactical/);
+    assert.ok(typeof response === 'object' && response !== null && 'text' in response);
+    assert.equal(response.text, text);
+  } finally {
+    host.store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+void test('a board change invalidates a reply published for the previous position', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'lasso-stale-publication-'));
+  const host = new Runtime(directory);
+  try {
+    const workspace = host.store.workspace();
+    workspace.game = snapshot(new Chess('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1'));
+    host.store.save(workspace);
+    const context = host.coachContext();
+    const args = { version: context.version, referenceId: context.boardFacts.reference.id };
+    const coach = new CoachRuntime({
+      sessionsDir: host.sessionDirectory(),
+      getSettings: () => ({ mode: 'mock', provider: 'google', model: 'gemini-3.8-flash' }),
+      getPrompt: async () => ({ text: 'Use checked coaching.', version: 'test' }),
+      invokeTool: (name, raw, current) => host.tool(name, raw, 'coach', current),
+      mockResponses: () => [
+        fauxAssistantMessage(
+          fauxToolCall('verify_claims', {
+            ...args,
+            claims: [{ kind: 'checkmate' }],
+          }),
+        ),
+        (transcript) => {
+          const last = transcript.messages.at(-1);
+          assert.equal(last?.role, 'toolResult');
+          const encoded = last?.content.find((part) => part.type === 'text');
+          assert.equal(encoded?.type, 'text');
+          const { id } = JSON.parse(encoded!.text) as { id: string };
+          return fauxAssistantMessage(
+            fauxToolCall('publish_coaching', {
+              ...args,
+              verificationIds: [id],
+            }),
+          );
+        },
+        fauxAssistantMessage(
+          fauxToolCall('start_activity', {
+            version: context.version,
+            fen: new Chess().fen(),
+            quiet: true,
+          }),
+        ),
+        fauxAssistantMessage('Carry on.'),
+      ],
+    });
+    const response = await coach.run('Let’s continue', context);
+    assert.doesNotMatch(response.text, /checkmated/);
+    assert.match(response.text, /reset.*standard starting position/i);
+  } finally {
+    host.store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+void test('position clarification describes the actual board without requiring an unrelated attack claim', async () => {
+  const { verifier, args } = setup();
+  const result = await verifier.publish(
+    { ...args, verificationIds: [], prompt: 'position' },
+    async () => {},
+  );
+  assert.match(result.text, /standard starting position/);
+  assert.match(result.text, /White to move/);
+  assert.doesNotMatch(result.text, /geometrically|could not verify/);
+  const custom = setup('8/7k/8/8/8/4K3/4P3/8 w - - 0 1');
+  const explanation = await custom.verifier.publish(
+    { ...custom.args, verificationIds: [], prompt: 'position' },
+    async () => {},
+  );
+  assert.match(explanation.text, /training position/);
+  assert.match(explanation.text, /king on e3/);
+  assert.match(explanation.text, /pawn on e2/);
+  assert.match(explanation.text, /king on h7/);
+});
+
 void test('tactical regressions reject blocked captures, false knight attacks and false mating assertions', () => {
   const blocked = setup('7k/8/8/4r3/8/2P5/8/Q6K w - - 0 1');
   assert.throws(

@@ -34,6 +34,30 @@ const neutralPrompts = {
   observation: 'Take your time. I will wait for your move.',
   acknowledgement: 'Your request is recorded. Choose a candidate move when you are ready.',
 };
+/** Explain setup using the board itself, without relying on provider-authored chess claims. */
+export function describePosition(fen: string, changed = false) {
+  const board = new Chess(fen);
+  const starting = board.fen() === new Chess().fen();
+  const introduction = changed
+    ? starting
+      ? 'The board has been reset to the standard starting position.'
+      : 'The board has been set to a new training position.'
+    : starting
+      ? 'The board shows the standard starting position.'
+      : 'The board shows a training position.';
+  const turn = `${board.turn() === 'w' ? 'White' : 'Black'} to move on move ${board.moveNumber()}.`;
+  if (starting) return `${introduction} ${turn}`;
+  const names = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+  const pieces = (['w', 'b'] as const).map((color) => {
+    const locations = board
+      .board()
+      .flat()
+      .filter((piece) => piece?.color === color)
+      .map((piece) => `${names[piece!.type]} on ${piece!.square}`);
+    return `${color === 'w' ? 'White' : 'Black'}: ${locations.join(', ')}.`;
+  });
+  return `${introduction} ${turn}\n\n${pieces.join('\n\n')}`;
+}
 const activities = {
   'free-play': {
     heading: 'Explore the position',
@@ -242,7 +266,11 @@ export class CoachingVerification {
   ) {
     const text = this.textFor(args);
     const prompt =
-      args.prompt === undefined ? '' : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
+      args.prompt === 'position'
+        ? describePosition(this.root.fen)
+        : args.prompt === undefined
+          ? ''
+          : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
     if (prompt === undefined)
       throw new VerificationError('unverified-output', 'Choose a supported teaching prompt.');
     if (

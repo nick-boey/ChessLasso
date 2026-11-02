@@ -18,7 +18,7 @@ import {
 } from '@earendil-works/pi-ai/providers/faux';
 import { InMemoryCredentialStore, type JsonObject } from '@earendil-works/pi-ai';
 import type { TSchema } from 'typebox';
-import { CoachingVerification, VerificationError } from './verification.js';
+import { CoachingVerification, VerificationError, describePosition } from './verification.js';
 import { positionReference } from './board-facts.js';
 const verificationReference = (context: CoachContext) =>
   positionReference(context.fen, context.version).id;
@@ -280,6 +280,22 @@ export class CoachRuntime {
     };
     const actions: CoachAction[] = [];
     let verification = new CoachingVerification(context);
+    const refreshVerification = (fresh: Record<string, unknown>) => {
+      if (
+        typeof fresh.fen !== 'string' ||
+        typeof fresh.pgn !== 'string' ||
+        typeof fresh.version !== 'number'
+      )
+        throw new Error('Host did not supply a referenced position.');
+      if (fresh.fen === verification.root.fen && fresh.version === verification.root.version)
+        return false;
+      verification = new CoachingVerification({
+        fen: fresh.fen,
+        pgn: fresh.pgn,
+        version: fresh.version,
+      });
+      return true;
+    };
     const playerFacing = role === 'coach' || role === 'question-feedback';
     const allowed = definitions.filter(
       (tool) =>
@@ -333,19 +349,7 @@ export class CoachRuntime {
           if (readKey && cachedReads.has(readKey)) result = cachedReads.get(readKey);
           else if (tool.name === 'inspect_board') {
             result = await this.host.invokeTool(tool.name, args, context);
-            const fresh = dictionary(result);
-            if (
-              typeof fresh.fen !== 'string' ||
-              typeof fresh.pgn !== 'string' ||
-              typeof fresh.version !== 'number'
-            )
-              throw new Error('Host did not supply a referenced position.');
-            if (fresh.fen !== verification.root.fen || fresh.version !== verification.root.version)
-              verification = new CoachingVerification({
-                fen: fresh.fen,
-                pgn: fresh.pgn,
-                version: fresh.version,
-              });
+            refreshVerification(dictionary(result));
           } else if (tool.name === 'analyse_position')
             result = await verification.analyse(args, signal);
           else if (tool.name === 'verify_claims') result = verification.verify(args);
@@ -473,11 +477,23 @@ export class CoachRuntime {
         );
       if (terminalFailure) throw terminalFailure;
       const rawText = session.getLastAssistantText() ?? '';
-      const text = playerFacing ? verification.finalText(rawText) : rawText;
+      const boardSetup = actions.some(
+        (action) => action.name === 'start_activity' && typeof action.args.fen === 'string',
+      );
+      let discarded = false;
+      if (playerFacing && (boardSetup || actions.some((action) => action.name === 'play_move')))
+        discarded = refreshVerification(
+          dictionary(await this.host.invokeTool('inspect_board', {}, context)),
+        );
+      const verifiedText = playerFacing ? verification.finalText(rawText) : rawText;
+      const text =
+        playerFacing && boardSetup
+          ? `${describePosition(verification.root.fen, true)}\n\n${verifiedText}`
+          : verifiedText;
       if (
         playerFacing &&
         text !== rawText &&
-        !actions.some((action) => action.name === 'publish_coaching')
+        (discarded || !actions.some((action) => action.name === 'publish_coaching'))
       )
         await this.host.invokeTool(
           'record_verification_failure',

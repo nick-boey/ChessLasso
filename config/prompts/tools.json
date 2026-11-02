@@ -124,7 +124,7 @@
   {
     "name": "publish_coaching",
     "label": "Publish checked coaching",
-    "description": "Publish host-rendered verified facts using same-turn verification IDs, optionally followed by a neutral teaching prompt. Free-form final assistant prose is withheld from players. Records assistance before verified advice is exposed; observation mode still requires the player to request hints.",
+    "description": "Publish host-rendered verified facts using same-turn verification IDs, optionally followed by a neutral teaching prompt. Use prompt position with empty verificationIds to explain the current board setup without making an unrelated tactical claim. Free-form final assistant prose is withheld from players. Records assistance before verified advice is exposed; observation mode still requires the player to request hints.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -145,7 +145,7 @@
           }
         },
         "prompt": {
-          "enum": ["candidate", "reasoning", "retry", "observation", "acknowledgement"]
+          "enum": ["candidate", "reasoning", "retry", "observation", "acknowledgement", "position"]
         }
       },
       "required": ["version", "referenceId", "verificationIds"],
