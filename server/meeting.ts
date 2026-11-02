@@ -1,6 +1,15 @@
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
+import {
+  meetingSource,
+  meetingFacts,
+  verificationReceipts,
+  provenanceObjections,
+  factsReport,
+  countObjections,
+  type VerificationReceipt,
+} from './meeting-facts.js';
 import { parseProposal, qualityProposal, qualityReport } from './meeting-quality.js';
 import type { Runtime } from './runtime.js';
 import { coachingDay, type DailyCallbacks } from './jobs.js';
@@ -9,6 +18,8 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
   return {
     snapshot: async (day) => ({
       day,
+      facts: meetingFacts(runtime.store, day),
+      games: runtime.store.get('game-index') ?? [],
       stats: runtime.store.stats(),
       ...runtime.store.dayEvents(day, coachingDay),
       plan: runtime.store.read('plans/current.md'),
@@ -21,7 +32,7 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
               text: `Mock consolidation for ${day}: insufficient independent evidence; preserve the baseline plan.`,
               actions: [],
             },
-            evidence,
+            meetingSource(runtime.store, evidence),
           ),
         );
       const result = await runtime.paid(
@@ -29,22 +40,52 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
         runtime.store.workspace(),
         'consolidation',
       );
-      return JSON.stringify(qualityProposal(result, evidence));
+      return JSON.stringify({
+        ...qualityProposal(result, meetingSource(runtime.store, evidence)),
+        verification: verificationReceipts(result.actions),
+      });
     },
     critique: async (day, evidence, proposal, round) => {
-      if (runtime.store.workspace().mode === 'mock')
-        return {
-          accepted: true,
-          text: 'Independent mock review: do not infer strength from assisted completion or a small sample.',
-        };
-      const text = (
-        await runtime.paid(
-          JSON.stringify({ day, evidence, proposal, round }),
-          runtime.store.workspace(),
-          'assistant-coach',
-        )
-      ).text;
-      return { accepted: /\bACCEPT\s*$/.test(text), text };
+      const facts = meetingFacts(runtime.store, day, evidence);
+      const parsed = parseProposal(proposal);
+      const result =
+        runtime.store.workspace().mode === 'mock'
+          ? {
+              text: 'Independent mock review: do not infer strength from assisted completion or a small sample.',
+              actions: [],
+            }
+          : await runtime.paid(
+              JSON.stringify({ day, evidence, proposal, round, hostFacts: facts }),
+              runtime.store.workspace(),
+              'assistant-coach',
+            );
+      const verification = verificationReceipts(result.actions);
+      const leadText = [
+        parsed.text,
+        ...parsed.actions
+          .filter((action) => action.name === 'propose_record_update')
+          .map((action) => (typeof action.args.text === 'string' ? action.args.text : '')),
+      ].join('\n');
+      const objections = [
+        ...facts.issues,
+        ...countObjections(leadText, facts),
+        ...countObjections(result.text, facts),
+        ...provenanceObjections(leadText, parsed.verification ?? [], 'lead'),
+        ...provenanceObjections(result.text, verification, 'reviewer'),
+      ];
+      return {
+        accepted:
+          (runtime.store.workspace().mode === 'mock' || /\bACCEPT\s*$/.test(result.text)) &&
+          objections.length === 0,
+        text: objections.length
+          ? result.text.replace(/\bACCEPT\s*$/, 'REVISE') +
+            '\nHost review objections: ' +
+            objections.join(' ')
+          : result.text,
+        verification,
+        hostFacts: facts,
+        objections,
+      };
     },
     revise: async (day, evidence, proposal, critique) => {
       const result = await runtime.paid(
@@ -52,14 +93,38 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
         runtime.store.workspace(),
         'consolidation',
       );
-      return JSON.stringify(qualityProposal(result, evidence));
+      return JSON.stringify({
+        ...qualityProposal(result, meetingSource(runtime.store, evidence)),
+        verification: verificationReceipts(result.actions),
+      });
     },
     commit: async (meeting) => {
       if (runtime.store.get('meeting:' + meeting.day)) return;
       const proposal = parseProposal(meeting.proposal ?? 'No change.');
-      const accepted = meeting.rounds.at(-1)?.critique.accepted === true;
+      const facts = meetingFacts(runtime.store, meeting.day, meeting.evidence);
+      const leadText = [
+        proposal.text,
+        ...proposal.actions
+          .filter((action) => action.name === 'propose_record_update')
+          .map((action) => (typeof action.args.text === 'string' ? action.args.text : '')),
+      ].join('\n');
+      const objections = [
+        ...provenanceObjections(leadText, proposal.verification ?? [], 'lead'),
+        ...countObjections(leadText, facts),
+      ];
+      const accepted = meeting.rounds.at(-1)?.critique.accepted === true && objections.length === 0;
       const engineering = qualityReport(proposal, accepted);
-      const report = proposal.text + engineering;
+      const review = meeting.rounds.at(-1)?.critique as
+        | { verification?: VerificationReceipt[]; objections?: string[] }
+        | undefined;
+      const safeText = objections.length
+        ? 'Lead narrative withheld from the final report because its verification or strength claims are unsupported. See proposal.json for the attributed, unaccepted source claim.\n' +
+          objections.join('\n')
+        : proposal.text;
+      const report =
+        safeText +
+        engineering +
+        factsReport(facts, proposal.verification ?? [], review?.verification ?? []);
       const unresolved = accepted
         ? ''
         : '\n\nUnresolved assistant-coach objections: retain the prior training plan and profile pending further evidence.';
