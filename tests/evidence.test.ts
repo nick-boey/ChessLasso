@@ -180,3 +180,82 @@ void test('frozen cross-day game context and UTF-8 record pages stay stable afte
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+void test('paginated meeting proposal and independent critique finish within three requests per stage', async () => {
+  const { CoachRuntime } = await import('../server/coach.js');
+  const { fauxAssistantMessage, fauxToolCall } =
+    await import('@earendil-works/pi-ai/providers/faux');
+  const directory = await mkdtemp(join(tmpdir(), 'lasso-finite-meeting-'));
+  const runtime = new Runtime(directory);
+  runtime.backup.checkpoint = async () => {};
+  let stages = 0,
+    modelRequests = 0;
+  try {
+    const workspace = runtime.store.workspace();
+    workspace.mode = 'live';
+    runtime.store.save(workspace);
+    const event = runtime.store.event('move', { detail: 'evidence '.repeat(2000) });
+    runtime.store.db
+      .prepare('UPDATE events SET at=? WHERE id=?')
+      .run('2026-10-31T12:00:00Z', event.id);
+    runtime.coach = new CoachRuntime({
+      sessionsDir: join(directory, 'sessions'),
+      getSettings: () => ({ mode: 'mock', provider: 'google', model: 'unused', maxRequests: 3 }),
+      getPrompt: async () => ({
+        text: 'Review frozen evidence; preserve unsupported decisions.',
+        version: 'test',
+      }),
+      invokeTool: (name, args) => runtime.tool(name, args),
+      mockResponses: (message) => {
+        stages++;
+        const request = JSON.parse(message);
+        const first = [
+          fauxToolCall('read_history', {
+            path: request.evidence.records.teaching.path,
+            offset: 0,
+            limit: 12000,
+          }),
+        ];
+        if (request.proposal)
+          first.push(
+            fauxToolCall('read_history', { path: request.proposal.path, offset: 0, limit: 12000 }),
+          );
+        return [
+          () => {
+            modelRequests++;
+            return fauxAssistantMessage(first);
+          },
+          () => {
+            modelRequests++;
+            return fauxAssistantMessage(
+              fauxToolCall('read_history', {
+                path: request.evidence.records.teaching.path,
+                offset: 12000,
+                limit: 12000,
+              }),
+            );
+          },
+          () => {
+            modelRequests++;
+            return fauxAssistantMessage(
+              request.stage === 'critique'
+                ? 'Retain the baseline; insufficient independent evidence. ACCEPT'
+                : 'Retain baseline pending a delayed independent retest.',
+            );
+          },
+        ];
+      },
+    });
+    const result = await new DailyJobs(
+      join(directory, 'jobs'),
+      createMeetingCallbacks(runtime, directory),
+    ).runDay('2026-10-31');
+    assert.equal(result?.status, 'complete');
+    assert.equal(result?.rounds[0]?.critique.accepted, true);
+    assert.equal(stages, 2);
+    assert.equal(modelRequests, 6);
+  } finally {
+    runtime.store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

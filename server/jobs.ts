@@ -1,3 +1,4 @@
+import { CoachFailure, redactCoachText } from './coach.js';
 import { mkdir, readFile, readdir, rename, writeFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -31,6 +32,7 @@ export type Meeting = {
   rounds: { critique: Critique; revision?: string }[];
   status: 'pending' | 'complete';
   error?: string;
+  failure?: { stage: string; code: string; message: string };
   development?: 'complete' | 'pending';
   nextDevelopmentAt?: number;
 };
@@ -102,6 +104,7 @@ export class DailyJobs {
         meeting = { day, rounds: [], status: 'pending' };
       }
       if (meeting.status === 'complete') return meeting;
+      let stage = 'snapshot';
       try {
         if (meeting.evidence === undefined) {
           meeting.evidence = await this.callbacks.snapshot(day);
@@ -112,12 +115,14 @@ export class DailyJobs {
           await this.save(file, meeting);
         }
         if (!meeting.proposal) {
+          stage = 'proposal';
           meeting.proposal = await this.callbacks.propose(day, meeting.evidence);
           await this.save(file, meeting);
         }
         for (let round = 0; round < 2; round++) {
           let entry = meeting.rounds[round];
           if (!entry) {
+            stage = `critique:${round + 1}`;
             entry = {
               critique: await this.callbacks.critique(
                 day,
@@ -131,6 +136,7 @@ export class DailyJobs {
           }
           if (entry.critique.accepted) break;
           if (!entry.revision) {
+            stage = `revision:${round + 1}`;
             entry.revision = await this.callbacks.revise(
               day,
               meeting.evidence,
@@ -142,12 +148,22 @@ export class DailyJobs {
           meeting.proposal = entry.revision;
         }
         delete meeting.error;
+        delete meeting.failure;
+        stage = 'commit';
         await this.callbacks.commit({ ...meeting, status: 'complete' });
         meeting.status = 'complete';
         await this.save(file, meeting);
         return meeting;
       } catch (error) {
-        meeting.error = error instanceof Error ? error.name : 'JobFailure';
+        meeting.failure = {
+          stage,
+          code: error instanceof CoachFailure ? error.code : 'job_failure',
+          message:
+            error instanceof CoachFailure
+              ? redactCoachText(error.message).slice(0, 500)
+              : 'Daily job stage failed; inspect the redacted server diagnostics.',
+        };
+        meeting.error = `${meeting.failure.stage}: ${meeting.failure.code}`;
         await this.save(file, meeting);
         throw error;
       }
