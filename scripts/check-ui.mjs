@@ -347,7 +347,49 @@ try {
   await page.getByRole('button', { name: 'Progress', exact: true }).click();
   assert.match(await page.locator('main').innerText(), /Baseline not assessed/);
   await page.getByRole('button', { name: 'Journal', exact: true }).click();
-  assert.match(await page.locator('main').innerText(), /Coaching diary/);
+  await page.getByRole('heading', { name: 'Coaching diary', exact: true }).waitFor();
+  assert.match(await page.locator('main').innerText(), /No coaching notes saved yet/);
+  await page.route('**/api/journal', (route) =>
+    route.fulfill({
+      json: {
+        notes:
+          '## King safety\n\n**Castle early.**\n\n<script>window.journalExecuted = true</script>',
+        profile: '# Baseline\n\nDeveloping calculation.',
+        plan: '- Compare candidates\n- Check threats',
+        entries: [
+          {
+            day: '2026-11-02',
+            text: '# Daily reflection\n\nPractise `Nc3`.\n\n| Focus | Next |\n| --- | --- |\n| Safety | Castle |',
+          },
+        ],
+      },
+    }),
+  );
+  await page.getByRole('button', { name: 'Refresh journal', exact: true }).click();
+  await page.getByRole('heading', { name: 'King safety', exact: true }).waitFor();
+  assert.equal(await page.locator('.journal-entry strong').innerText(), 'Castle early.');
+  assert.equal(await page.locator('.journal-entry table').count(), 1);
+  assert.equal(
+    await page.locator('.journal-entry :is(textarea, input, [contenteditable])').count(),
+    0,
+  );
+  assert.equal(await page.evaluate(() => window.journalExecuted), undefined);
+  await page.screenshot({ path: `${output}/journal-desktop.png`, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(
+    await page
+      .locator('.journal-entry .message-content h1')
+      .first()
+      .evaluate((element) => getComputedStyle(element).fontSize),
+    '14px',
+  );
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({ path: `${output}/journal-mobile.png`, fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.unroute('**/api/journal');
+  passed.push(
+    'Journal renders read-only sanitized Markdown notes, plan and dated diary on desktop and mobile',
+  );
   await page.getByRole('button', { name: 'Board', exact: true }).click();
 
   await send('Start a new game');

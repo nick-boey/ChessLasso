@@ -4,6 +4,7 @@
   import Board from './lib/Board.svelte';
   import Icon from './lib/Icon.svelte';
   import Markdown from './lib/Markdown.svelte';
+  import Journal from './lib/Journal.svelte';
   import {
     loadGame,
     practiceGame,
@@ -98,8 +99,6 @@
   let paused = $state(false);
   let hasControl = $state(true);
   let profile = $state('Baseline not assessed.');
-  let plan = $state('Establish a varied baseline.');
-  let diary = $state<string[]>([]);
   let totals = $state({
     moves: 0,
     assistance: 0,
@@ -221,9 +220,7 @@
       ),
     );
     profile = saved.stats.profile;
-    plan = saved.stats.plan;
     totals = saved.stats;
-    diary = saved.journal;
     spent = saved.usage?.amount ?? 0;
     if (saved.budget.mode === 'warning' && spent >= saved.budget.amount)
       savedNotice =
@@ -944,19 +941,7 @@
     </div>
   {:else}
     <div class="reading-layout">
-      <article class="paper-section journal-entry">
-        <div class="journal-meta">
-          <span>Coaching diary</span><span>04:00 · Australia/Sydney</span>
-        </div>
-        {#if diary.length}{#each diary as entry}<p style="white-space:pre-wrap">
-              {entry}
-            </p>{/each}{:else}<p>
-            No completed daily meeting yet. The first meeting will review
-            recorded training after the next cutoff.
-          </p>{/if}
-        <h3>Current plan</h3>
-        <p style="white-space:pre-wrap">{plan}</p>
-      </article>
+      <Journal />
       <aside class="paper-section">
         <h2>Session events</h2>
         <p>
