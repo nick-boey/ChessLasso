@@ -1,3 +1,4 @@
+import type { VerificationReceipt } from './meeting-facts.js';
 import type { CoachAction, CoachResult } from './coach.js';
 
 export interface QualityDefect {
@@ -9,6 +10,7 @@ export interface MeetingProposal {
   text: string;
   actions: Pick<CoachAction, 'name' | 'args'>[];
   qualityDefects?: QualityDefect[];
+  verification?: VerificationReceipt[];
 }
 
 /** Only host-recorded deterministic rejections create engineering work automatically. */

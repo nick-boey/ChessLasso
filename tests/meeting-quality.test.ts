@@ -85,8 +85,12 @@ void test('independent reviewer receives engineering proposal and acceptance que
   let reviewed = false;
   runtime.paid = async (message, _workspace, role) => {
     if (role === 'assistant-coach') {
-      const request = JSON.parse(message) as { proposal: string };
-      const staged = JSON.parse(request.proposal) as { actions: { name: string }[] };
+      const request = JSON.parse(message) as { proposal: string | { path: string } };
+      const staged = JSON.parse(
+        typeof request.proposal === 'string'
+          ? request.proposal
+          : runtime.store.read(request.proposal.path),
+      ) as { actions: { name: string }[] };
       assert.equal(staged.actions[0].name, 'propose_app_change');
       reviewed = true;
     }
