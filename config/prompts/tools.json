@@ -1,5 +1,22 @@
 [
   {
+    "name": "choose_next_activity",
+    "label": "Choose next training activity",
+    "description": "After a completed game, consult the current training plan and choose the next step. Cite an exact planExcerpt. Usually review the game at a useful reviewPly. Assessment-game requires a measurement and then start_activity with the standard initial position and quiet=true. Practice requires setting up the next activity. The host displays your plan-backed choice and explanation; no free-form tactical prose is needed.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "integer", "minimum": 0 },
+        "kind": { "enum": ["review", "assessment-game", "practice"] },
+        "planExcerpt": { "type": "string", "minLength": 10, "maxLength": 1000 },
+        "reviewPly": { "type": "integer", "minimum": 0 },
+        "measurement": { "enum": ["independent-decisions", "opening-principles", "calculation"] }
+      },
+      "required": ["version", "kind", "planExcerpt"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "inspect_board",
     "label": "Inspect board",
     "description": "Read deterministic boardFacts for the referenced current, historical or question position. Includes geometric attacks, defenders, sliding blockers, relative/absolute pins, legal moves and king escapes. Facts are tied to full FEN and version; never reuse after a position change. Attacks and pins are not legal moves. Inspection does not authorize revealing hints in observation mode; record assistance before disclosure.",

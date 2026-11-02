@@ -19,6 +19,7 @@ import { searchArchive } from './sandbox.js';
 import { meetingAction } from './meeting-actions.js';
 import { boardFacts } from './board-facts.js';
 import { describeGameOver } from './verification.js';
+import { chooseNextActivity, type NextActivity } from './training.js';
 
 export class Runtime {
   store: Store;
@@ -139,6 +140,37 @@ export class Runtime {
         note = describeGameOver(workspace.game.pgn);
         workspace.activity = { heading: 'Game complete', subtitle: workspace.game.status };
         this.store.save(workspace);
+        if (workspace.mode === 'live' && this.coach) {
+          const priorDecision = this.store.get<NextActivity>('next-activity:' + workspace.gameId);
+          try {
+            const decision = await this.paid(this.prompts('game-complete'), workspace);
+            note += '\n\n' + decision.text;
+            response = { ...decision };
+            const choice = decision.actions.find((action) => action.name === 'choose_next_activity')
+              ?.result as NextActivity | undefined;
+            if (choice?.kind === 'review') response.reviewPly = choice.reviewPly;
+            if (this.store.workspace().gameId !== workspace.gameId) {
+              await this.reply();
+              const next = this.store.workspace();
+              if (next.game.moves.length)
+                note += `\n\nThe opponent played ${next.game.moves.at(-1)}. ${next.game.status}.`;
+            }
+          } catch {
+            const accepted = this.store.get<NextActivity>('next-activity:' + workspace.gameId);
+            if (accepted && accepted.planningId !== priorDecision?.planningId) {
+              if (!note.includes(accepted.text)) note += '\n\n' + accepted.text;
+              if (accepted.kind === 'review') response.reviewPly = accepted.reviewPly;
+              else if (this.store.workspace().gameId !== workspace.gameId)
+                note +=
+                  '\n\nThe next activity is set up. If the opponent has not moved yet, retry after reconnecting.';
+              else
+                note +=
+                  '\n\nThe chosen activity could not be set up. The completed game is still available.';
+            } else
+              note +=
+                '\n\nI couldn’t complete the training-plan review. Your final position is saved; send a message to retry planning the next activity.';
+          }
+        }
       } else if (!workspace.quiet) {
         if (workspace.mode === 'live' && this.coach) {
           try {
@@ -275,6 +307,8 @@ export class Runtime {
         ...this.coachContext(context),
         recentMessages: role === 'coach' ? this.coachContext(context).recentMessages : undefined,
         runRole: role,
+        postGamePlanning: role === 'coach' && context.game.over,
+        planningId: role === 'coach' && context.game.over ? randomUUID() : undefined,
       },
       role as CoachRole,
       role === 'coach' || role === 'question-feedback'
@@ -331,7 +365,10 @@ export class Runtime {
       if (!reviewed && workspace.game.over && message === 'Resume coaching and help again') {
         workspace.quiet = false;
         this.store.save(workspace);
-        result = { text: describeGameOver(workspace.game.pgn) };
+        result =
+          workspace.mode === 'live' && this.coach
+            ? { ...(await this.paid(message + '\n\n' + this.prompts('game-complete'), workspace)) }
+            : { text: describeGameOver(workspace.game.pgn) };
       } else if (workspace.mode === 'live')
         result = {
           ...(await this.paid(
@@ -403,7 +440,14 @@ export class Runtime {
           classification: 'unclassified-content',
           action: result.action ?? 'text',
         });
-      const response = { ...result, workspace: this.state() };
+      const choice = (result.actions as { name: string; result: NextActivity }[] | undefined)?.find(
+        (action) => action.name === 'choose_next_activity',
+      )?.result;
+      const response = {
+        ...result,
+        ...(choice?.kind === 'review' ? { reviewPly: choice.reviewPly } : {}),
+        workspace: this.state(),
+      };
       this.store.remember(id, response);
       return response;
     });
@@ -528,7 +572,7 @@ export class Runtime {
     name: string,
     args: Record<string, unknown>,
     runRole = 'coach',
-    context?: { fen: string; pgn: string; version: number },
+    context?: { fen: string; pgn: string; version: number; [key: string]: unknown },
     acceptedMeetingActionKey?: string,
   ) {
     if (
@@ -547,9 +591,26 @@ export class Runtime {
       'set_opponent',
       'write_player_note',
       'record_intervention',
+      'choose_next_activity',
     ];
     if (mutations.includes(name) && args.version !== workspace.version) throw new ConflictError();
     switch (name) {
+      case 'choose_next_activity': {
+        if (runRole !== 'coach')
+          throw new Error('Only the coach chooses the next training activity.');
+        const decision = {
+          ...chooseNextActivity(workspace, this.store.read('plans/current.md'), args),
+          planningId: typeof context?.planningId === 'string' ? context.planningId : undefined,
+        };
+        if (decision.kind === 'review')
+          workspace.activity = {
+            heading: 'Review the game',
+            subtitle: 'Reflect on your intention and the reply you expected.',
+          };
+        this.store.put('next-activity:' + workspace.gameId, decision);
+        this.save(workspace, 'next_activity', decision);
+        return decision;
+      }
       case 'record_verification_failure':
         this.store.event('coach_verification', { valid: false, ...args });
         return { recorded: true };
@@ -584,6 +645,28 @@ export class Runtime {
       }
       case 'set_activity':
       case 'start_activity': {
+        if (context?.postGamePlanning && typeof args.fen === 'string') {
+          const decision = this.store.get<NextActivity>('next-activity:' + String(context.gameId));
+          if (
+            !decision ||
+            decision.version !== context.version ||
+            decision.planningId !== context.planningId ||
+            decision.planHash !==
+              createHash('sha256').update(this.store.read('plans/current.md')).digest('hex')
+          )
+            throw new Error(
+              'Choose the next activity against the current training plan before replacing the board.',
+            );
+          if (decision.kind === 'review')
+            throw new Error('Keep the completed game available for the chosen review.');
+          if (
+            decision.kind === 'assessment-game' &&
+            (args.fen !== new Chess().fen() || args.quiet !== true)
+          )
+            throw new Error(
+              'An assessment game must start at the standard position with quiet=true.',
+            );
+        }
         if (
           (args.heading !== undefined &&
             (typeof args.heading !== 'string' || args.heading.length > 120)) ||

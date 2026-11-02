@@ -65,6 +65,13 @@ for (const quiet of [true, false]) {
         invokeTool: (name, args, current) => host.tool(name, args, 'coach', current),
         mockResponses: () => [
           fauxAssistantMessage(
+            fauxToolCall('choose_next_activity', {
+              version: workspace.version,
+              kind: 'practice',
+              planExcerpt: host.store.read('plans/current.md').slice(0, 500),
+            }),
+          ),
+          fauxAssistantMessage(
             fauxToolCall('start_activity', {
               version: workspace.version,
               fen: new Chess().fen(),

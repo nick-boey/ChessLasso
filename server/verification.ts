@@ -47,7 +47,7 @@ export function describeGameOver(pgn: string) {
         : board.isThreefoldRepetition()
           ? 'The game is drawn by threefold repetition.'
           : 'The game is drawn by the fifty-move rule.';
-  return `Game over. ${result}\n\nWould you like to review the finish or choose your next activity?`;
+  return `Game over. ${result}\n\nThe completed game is saved for review against your training plan before choosing the next activity.`;
 }
 /** Explain setup using the board itself, without relying on provider-authored chess claims. */
 export function describePosition(fen: string, changed = false) {

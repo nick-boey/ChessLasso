@@ -25,6 +25,7 @@ const verificationReference = (context: CoachContext) =>
   positionReference(context.fen, context.version).id;
 import definitions from '../config/prompts/tools.json' with { type: 'json' };
 import mock from '../config/mock-coach.json' with { type: 'json' };
+import type { NextActivity } from './training.js';
 
 export type CoachRole =
   | 'coach'
@@ -495,13 +496,26 @@ export class CoachRuntime {
             ? 'A new independent game is ready. Choose your opening moves when it is your turn. I’ll observe until you ask for help.'
             : 'A new game is ready. For your opening moves, think about controlling the center, developing your pieces and keeping your king safe. Which move would you like to try?'
           : verifiedText;
-      const text =
+      let text =
         playerFacing && boardSetup
           ? `${describePosition(verification.root.fen, true)}\n\n${setupText}`
           : verifiedText;
+      const decision = actions.find((action) => action.name === 'choose_next_activity')?.result as
+        | NextActivity
+        | undefined;
+      if (playerFacing && context.postGamePlanning) {
+        if (!decision)
+          throw new Error(
+            'The coach must choose the next activity using the current training plan.',
+          );
+        if (decision.kind !== 'review' && !boardSetup)
+          throw new Error('Set up the chosen next activity before announcing it.');
+        text = decision.text + (boardSetup ? '\n\n' + text : '');
+      }
       if (
         playerFacing &&
         text !== rawText &&
+        !decision &&
         (discarded || !actions.some((action) => action.name === 'publish_coaching'))
       )
         await this.host.invokeTool(
@@ -537,6 +551,17 @@ export class CoachRuntime {
   private mockResponses(message: string, context: CoachContext, role: CoachRole) {
     const text = message.toLowerCase();
     if (role !== 'coach') return [fauxAssistantMessage(mock.default)];
+    if (context.postGamePlanning)
+      return [
+        fauxAssistantMessage(
+          fauxToolCall('choose_next_activity', {
+            version: context.version,
+            kind: 'review',
+            planExcerpt: String(context.plan).slice(0, 500),
+          }),
+        ),
+        fauxAssistantMessage('Review the completed game.'),
+      ];
     const version = context.version;
     let response = mock.default;
     let name = 'ask_question';

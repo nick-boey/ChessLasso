@@ -511,6 +511,89 @@ try {
   await navigationPage.setViewportSize({ width: 390, height: 844 });
   await navigationPage.screenshot({ path: `${output}/history-mobile.png`, fullPage: true });
   await navigationPage.close();
+  const completionPage = await context.newPage();
+  completionPage.on('pageerror', (error) => errors.push(error.message));
+  await completionPage.route('**/api/presence', (route) =>
+    route.fulfill({ json: { control: true } }),
+  );
+  const beforeFinish = new Chess();
+  beforeFinish.move('f3');
+  beforeFinish.move('e5');
+  // Keep the full history so the server-selected review ply is meaningful.
+  const finished = new Chess();
+  for (const san of ['f3', 'e5', 'g4', 'Qh4#']) finished.move(san);
+  const fixture = await stored();
+  const gameState = (board) => ({
+    fen: board.fen(),
+    pgn: board.pgn(),
+    moves: board.history(),
+    turn: board.turn(),
+    over: board.isGameOver(),
+    lastMove: null,
+    status: board.isGameOver() ? 'Checkmate' : 'White to move',
+  });
+  const initialCompletionState = {
+    ...fixture,
+    gameId: 'completion-review',
+    game: gameState(beforeFinish),
+    quiet: true,
+  };
+  let completionState = initialCompletionState;
+  await completionPage.route('**/api/state', (route) => route.fulfill({ json: completionState }));
+  await completionPage.route('**/api/move', (route) => {
+    const note =
+      'I’ve reviewed the training plan. Let’s review the position before your last move.';
+    completionState = {
+      ...initialCompletionState,
+      game: gameState(finished),
+      conversations: [
+        {
+          id: 999,
+          fen: finished.fen(),
+          label: '2. g4 Qh4#',
+          messages: [{ id: 999, role: 'coach', text: note }],
+        },
+      ],
+    };
+    return route.fulfill({
+      json: {
+        played: 'g4',
+        note,
+        game: completionState.game,
+        workspace: completionState,
+        reviewPly: 2,
+      },
+    });
+  });
+  await completionPage.goto(baseURL);
+  const finishingMove = completionPage.getByRole('textbox', { name: 'Your move', exact: true });
+  await completionPage.waitForFunction(() => !document.querySelector('#move')?.disabled);
+  await finishingMove.fill('g4');
+  await finishingMove.press('Enter');
+  await completionPage
+    .getByText(
+      'I’ve reviewed the training plan. Let’s review the position before your last move.',
+      { exact: true },
+    )
+    .waitFor();
+  await completionPage.locator('.move-button[data-ply="2"][aria-current="step"]').waitFor();
+  await completionPage.waitForFunction(() =>
+    document
+      .querySelector('.board-frame .chess-board')
+      ?.getAttribute('aria-label')
+      ?.includes('Reviewing 1... e5'),
+  );
+  assert.match(
+    await completionPage.locator('.board-frame .chess-board').getAttribute('aria-label'),
+    /Reviewing 1\.\.\. e5/,
+  );
+  assert.equal(await finishingMove.isDisabled(), true);
+  await completionPage.getByRole('button', { name: 'Go to latest move', exact: true }).click();
+  await completionPage.locator('.move-button[data-ply="4"][aria-current="step"]').waitFor();
+  await completionPage.close();
+  passed.push(
+    'Coach-selected post-game review displays the historical ply while retaining the completed game',
+  );
   passed.push(
     'Long move lists scroll to the selected move and fit desktop/mobile without horizontal overflow',
   );
