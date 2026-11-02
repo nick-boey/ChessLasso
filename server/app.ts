@@ -2,7 +2,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { getCookie, setCookie } from 'hono/cookie';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import { redactCoachText } from './coach.js';
+import { CoachFailure, redactCoachText } from './coach.js';
 import { Runtime, ConflictError } from './runtime.js';
 import { NotationError, validBudget } from '../src/lib/chess.js';
 
@@ -357,6 +357,11 @@ export function createApp(
   });
   app.get('/api/games', (c) => c.json(runtime.store.get('game-index') ?? []));
   app.onError((error, c) => {
+    if (error instanceof CoachFailure)
+      return c.json(
+        { error: error.message, kind: error.code },
+        error.code === 'timeout' ? 504 : error.code === 'provider_failure' ? 502 : 422,
+      );
     if (error instanceof NotationError)
       return c.json({ error: error.message, kind: error.kind }, 422);
     if (error instanceof ConflictError)

@@ -109,3 +109,93 @@ void test('restricted Pi mock executes the real tool boundary and preserves nati
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+void test('finite request budget reserves terminal output, caches duplicate reads and preserves exhaustion cause', async () => {
+  const { fauxAssistantMessage, fauxToolCall } =
+    await import('@earendil-works/pi-ai/providers/faux');
+  const { CoachFailure } = await import('../server/coach.js');
+  const directory = await mkdtemp(join(tmpdir(), 'lasso-budget-'));
+  let reads = 0;
+  let budget = 3;
+  const runtime = new CoachRuntime({
+    sessionsDir: directory,
+    getSettings: () => ({ mode: 'mock', provider: 'google', model: 'unused', maxRequests: budget }),
+    getPrompt: async () => ({ text: 'Review frozen evidence and finish.', version: 'test' }),
+    invokeTool: async () => {
+      reads++;
+      return { text: 'synthetic page', nextOffset: null };
+    },
+    mockResponses: () => [
+      fauxAssistantMessage(fauxToolCall('read_history', { path: 'meetings/day/teaching.jsonl' })),
+      fauxAssistantMessage(fauxToolCall('read_history', { path: 'meetings/day/teaching.jsonl' })),
+      (transcript) => {
+        const final = transcript.messages.at(-1);
+        assert.equal(final?.role, 'system');
+        assert.ok(
+          final?.role === 'system' &&
+            final.toolsRemoved?.some((tool) => tool.name === 'read_history'),
+        );
+        assert.ok(
+          final?.role === 'system' &&
+            typeof final.content === 'string' &&
+            final.content.includes('"finalRequest":true'),
+        );
+        return fauxAssistantMessage('Evidence reviewed; preserve the plan. ACCEPT');
+      },
+    ],
+  });
+  const context = { fen: new Chess().fen(), pgn: '', version: 0 };
+  try {
+    const result = await runtime.run('Read frozen meeting pages', context, 'consolidation');
+    assert.match(result.text, /ACCEPT/);
+    assert.equal(reads, 1);
+    budget = 1;
+    await assert.rejects(
+      runtime.run('Read frozen pages', context, 'assistant-coach'),
+      (error: unknown) =>
+        error instanceof CoachFailure &&
+        error.code === 'request_budget' &&
+        !/credentials/.test(error.message),
+    );
+    await assert.rejects(
+      runtime.run('x'.repeat(48001), context),
+      (error: unknown) => error instanceof CoachFailure && error.code === 'input_size',
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+void test('provider failures remain distinguishable and access-token redaction uses the deployed environment name', async () => {
+  const { fauxAssistantMessage } = await import('@earendil-works/pi-ai/providers/faux');
+  const { CoachFailure } = await import('../server/coach.js');
+  const directory = await mkdtemp(join(tmpdir(), 'lasso-provider-'));
+  const old = process.env.CHESSLASSO_ACCESS_TOKEN;
+  process.env.CHESSLASSO_ACCESS_TOKEN = 'synthetic-access-token-for-redaction';
+  try {
+    assert.equal(redactCoachText(process.env.CHESSLASSO_ACCESS_TOKEN), '[REDACTED]');
+    const runtime = new CoachRuntime({
+      sessionsDir: directory,
+      getSettings: () => ({ mode: 'mock', provider: 'google', model: 'unused' }),
+      getPrompt: async () => ({ text: 'Review evidence.', version: 'test' }),
+      invokeTool: async () => ({}),
+      mockResponses: () => [
+        fauxAssistantMessage('', {
+          stopReason: 'error',
+          errorMessage: 'synthetic provider rejected request synthetic-access-token-for-redaction',
+        }),
+      ],
+    });
+    await assert.rejects(
+      runtime.run('Review', { fen: new Chess().fen(), pgn: '', version: 0 }, 'assistant-coach'),
+      (error: unknown) =>
+        error instanceof CoachFailure &&
+        error.code === 'provider_failure' &&
+        !error.message.includes('synthetic-access-token'),
+    );
+  } finally {
+    if (old === undefined) delete process.env.CHESSLASSO_ACCESS_TOKEN;
+    else process.env.CHESSLASSO_ACCESS_TOKEN = old;
+    await rm(directory, { recursive: true, force: true });
+  }
+});

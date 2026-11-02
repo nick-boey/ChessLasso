@@ -13,6 +13,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  type FauxResponseStep,
 } from '@earendil-works/pi-ai/providers/faux';
 import { InMemoryCredentialStore, type JsonObject } from '@earendil-works/pi-ai';
 import type { TSchema } from 'typebox';
@@ -43,6 +44,8 @@ export interface CoachSettings {
   provider: 'google' | 'fireworks';
   model: string;
   timeoutMs?: number;
+  /** Finite per-turn cap. The final request is reserved for a terminal response. */
+  maxRequests?: number;
 }
 export interface CoachUsage {
   input: number;
@@ -71,6 +74,8 @@ export interface CoachHost {
   ) => Promise<unknown>;
   beforePaidCall?: () => void;
   onUsage?: (usage: CoachUsage) => void;
+  /** Scripted provider responses used only in mock mode. */
+  mockResponses?: (message: string, context: CoachContext, role: CoachRole) => FauxResponseStep[];
   onEvent?: (event: { type: string; tool?: string }) => void;
 }
 
@@ -105,6 +110,7 @@ export function redactCoachText(text: string) {
     'GEMINI_API_KEY',
     'FIREWORKS_API_KEY',
     'CHESSLASSO_TOKEN',
+    'CHESSLASSO_ACCESS_TOKEN',
     'GITHUB_TOKEN',
     'GH_TOKEN',
   ]) {
@@ -143,6 +149,22 @@ function resources(prompt: string): ResourceLoader {
   };
 }
 
+export type CoachFailureCode =
+  | 'input_size'
+  | 'request_budget'
+  | 'timeout'
+  | 'provider_failure'
+  | 'tool_limit';
+export class CoachFailure extends Error {
+  override name = 'CoachFailure';
+  constructor(
+    public code: CoachFailureCode,
+    message: string,
+  ) {
+    super(redactCoachText(message));
+  }
+}
+
 export class CoachRuntime {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private host: CoachHost) {}
@@ -159,14 +181,14 @@ export class CoachRuntime {
     role: CoachRole,
   ): Promise<CoachResult> {
     if (!message.trim() || message.length > 48000)
-      throw new Error('Coach message exceeds its limit.');
+      throw new CoachFailure('input_size', 'Coach message exceeds its limit.');
     const config = this.host.getSettings();
     const storedPrompt = await this.host.getPrompt(role);
     const prompt = { ...storedPrompt, text: redactCoachText(storedPrompt.text) };
     message = redactCoachText(message);
     context = redactValue(context);
     if (!prompt.text.trim() || prompt.text.length > 48000)
-      throw new Error('Invalid coaching prompt.');
+      throw new CoachFailure('input_size', 'Invalid coaching prompt.');
     const sessionDir = join(
       resolve(this.host.sessionsDir),
       new Date().toISOString().slice(0, 10),
@@ -186,22 +208,66 @@ export class CoachRuntime {
     if (faux) runtime.registerNativeProvider(faux.provider);
     const model = faux?.getModel() ?? runtime.getModel(config.provider, config.model);
     if (!model)
-      throw new Error(
+      throw new CoachFailure(
+        'provider_failure',
         'The configured model is not in the installed Pi catalog. Choose an explicit available model.',
       );
     if (!faux) {
       const key =
         config.provider === 'google' ? process.env.GEMINI_API_KEY : process.env.FIREWORKS_API_KEY;
       if (!key)
-        throw new Error(
+        throw new CoachFailure(
+          'provider_failure',
           `Missing ${config.provider === 'google' ? 'GEMINI_API_KEY' : 'FIREWORKS_API_KEY'}.`,
         );
       await runtime.setRuntimeApiKey(config.provider, key);
     }
+    const configuredRequests = config.maxRequests ?? 8;
+    if (!Number.isInteger(configuredRequests) || configuredRequests < 1 || configuredRequests > 8)
+      throw new CoachFailure(
+        'request_budget',
+        'Model request budget must be an integer from 1 to 8.',
+      );
+    const maxRequests = configuredRequests;
+    const startedAt = Date.now();
+    const timeoutMs = Math.min(120000, Math.max(5000, config.timeoutMs ?? 60000));
     let paidCalls = 0;
+    let terminalFailure: CoachFailure | undefined;
+    let finalRequest = false;
+    const cachedReads = new Map<string, unknown>();
     const stream = runtime.streamSimple.bind(runtime);
     runtime.streamSimple = (selected, transcript, options) => {
-      if (++paidCalls > 8) throw new Error('Coach turn reached its model request limit.');
+      if (++paidCalls > maxRequests) {
+        terminalFailure = new CoachFailure(
+          'request_budget',
+          'Coach turn exhausted its model request budget.',
+        );
+        throw terminalFailure;
+      }
+      if (
+        role !== 'coach' &&
+        role !== 'question-feedback' &&
+        (paidCalls === maxRequests || Date.now() - startedAt > timeoutMs * 0.75)
+      ) {
+        finalRequest = true;
+        transcript = {
+          ...transcript,
+          tools: [],
+          messages: [
+            ...transcript.messages,
+            {
+              role: 'system',
+              content: JSON.stringify({
+                finalRequest: true,
+                remainingModelRequests: 1,
+                toolCallsAllowed: false,
+              }),
+              toolsRemoved: definitions.map(({ name }) => ({ name })),
+              timestamp: Date.now(),
+            },
+          ],
+        };
+      }
       if (!faux) this.host.beforePaidCall?.();
       return stream(selected, transcript, { ...options, maxTokens: 1800 });
     };
@@ -224,10 +290,23 @@ export class CoachRuntime {
       parameters: tool.parameters as TSchema,
       executionMode: 'sequential',
       execute: async (_id, raw, signal) => {
-        if (++calls > 20) throw new Error('Coach turn reached its tool limit.');
+        if (finalRequest) {
+          terminalFailure = new CoachFailure(
+            'request_budget',
+            'Final model request must return a stage response without more tools.',
+          );
+          throw terminalFailure;
+        }
+        if (++calls > 20) {
+          terminalFailure = new CoachFailure('tool_limit', 'Coach turn reached its tool limit.');
+          throw terminalFailure;
+        }
         if (signal?.aborted) throw new Error('Coach tool cancelled.');
         let args = redactValue(dictionary(raw));
         this.host.onEvent?.({ type: 'tool_start', tool: tool.name });
+        const readKey = ['read_history', 'search_history'].includes(tool.name)
+          ? JSON.stringify([tool.name, args])
+          : undefined;
         let result: unknown;
         try {
           if (['analyse_position', 'verify_claims', 'publish_coaching'].includes(tool.name)) {
@@ -238,7 +317,8 @@ export class CoachRuntime {
                 'The referenced board changed. Inspect it again.',
               );
           }
-          if (tool.name === 'inspect_board') {
+          if (readKey && cachedReads.has(readKey)) result = cachedReads.get(readKey);
+          else if (tool.name === 'inspect_board') {
             result = await this.host.invokeTool(tool.name, args, context);
             const fresh = dictionary(result);
             if (
@@ -285,6 +365,7 @@ export class CoachRuntime {
           throw error;
         }
         result = redactValue(result);
+        if (readKey) cachedReads.set(readKey, result);
         const encoded = JSON.stringify(result ?? null);
         if (encoded.length > 96000) throw new Error('Tool result exceeded its limit.');
         actions.push({ name: tool.name, args, result });
@@ -345,12 +426,16 @@ export class CoachRuntime {
         if (!faux) this.host.onUsage?.(delta);
       }
     });
-    const timeoutMs = Math.min(120000, Math.max(5000, config.timeoutMs ?? 60000));
     const timeout = setTimeout(() => {
+      terminalFailure = new CoachFailure('timeout', 'Coach turn exceeded its time limit.');
       void session.abort();
     }, timeoutMs);
     try {
-      if (faux) faux.setResponses(this.mockResponses(message, context, role));
+      if (faux)
+        faux.setResponses(
+          this.host.mockResponses?.(message, context, role) ??
+            this.mockResponses(message, context, role),
+        );
       await session.prompt(JSON.stringify({ message, context, promptVersion: prompt.version }), {
         expandPromptTemplates: false,
       });
@@ -359,11 +444,16 @@ export class CoachRuntime {
         last?.role === 'assistant' &&
         (last.stopReason === 'error' || last.stopReason === 'aborted')
       )
-        throw new Error(
-          last.stopReason === 'aborted'
-            ? 'Coach turn timed out or was cancelled.'
-            : 'Provider request failed. Check credentials, quota and the configured model.',
+        throw (
+          terminalFailure ??
+          new CoachFailure(
+            last.stopReason === 'aborted' ? 'timeout' : 'provider_failure',
+            last.stopReason === 'aborted'
+              ? 'Coach turn timed out or was cancelled.'
+              : 'Provider request failed. Check credentials, quota and the configured model.',
+          )
         );
+      if (terminalFailure) throw terminalFailure;
       const rawText = session.getLastAssistantText() ?? '';
       const text = playerFacing ? verification.finalText(rawText) : rawText;
       if (
@@ -387,6 +477,13 @@ export class CoachRuntime {
         usage,
         sessionId: manager.getSessionId(),
       };
+    } catch (error) {
+      if (terminalFailure) throw terminalFailure;
+      if (error instanceof CoachFailure) throw error;
+      throw new CoachFailure(
+        'provider_failure',
+        'Provider request failed. Check credentials, quota and the configured model.',
+      );
     } finally {
       clearTimeout(timeout);
       unsubscribe();

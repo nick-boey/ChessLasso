@@ -15,6 +15,7 @@ export interface FrozenEvidence {
   truncated: boolean;
   cutoff: string;
   counts: { teaching: number; presence: number };
+  summary: { eventKinds: Record<string, number>; omittedKinds: number };
   presence: { observedExposureMs: number; interpretation: string };
   records: { raw: EvidenceRecord; teaching: EvidenceRecord; context: EvidenceRecord };
 }
@@ -79,6 +80,13 @@ export function freezeEvidence(store: Store, day: string, legacy?: unknown): Fro
   const events = Array.isArray(source.events) ? (source.events as Event[]) : [];
   const teaching = events.filter((event) => event.kind !== 'presence');
   const presence = events.filter((event) => event.kind === 'presence');
+  const eventKinds: Record<string, number> = {};
+  let omittedKinds = 0;
+  for (const event of teaching) {
+    if (event.kind in eventKinds) eventKinds[event.kind]++;
+    else if (Object.keys(eventKinds).length < 80) eventKinds[event.kind] = 1;
+    else omittedKinds++;
+  }
   const exposure = presence.reduce((total, event) => {
     const value = event.value as { observedExposureMs?: unknown } | null;
     return (
@@ -102,6 +110,7 @@ export function freezeEvidence(store: Store, day: string, legacy?: unknown): Fro
         ? source.capturedAt
         : (events.at(-1)?.at ?? 'legacy checkpoint; capture time unavailable'),
     counts: { teaching: teaching.length, presence: presence.length },
+    summary: { eventKinds, omittedKinds },
     presence: {
       observedExposureMs: exposure,
       interpretation:
@@ -149,6 +158,5 @@ export function makeMeetingRequest(
       critique === undefined
         ? undefined
         : record(store, day, 'critique.json', JSON.stringify(critique)),
-
   });
 }

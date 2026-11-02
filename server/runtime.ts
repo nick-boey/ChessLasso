@@ -15,6 +15,7 @@ import { redactCoachText, type CoachRuntime, type CoachRole } from './coach.js';
 import fixture from '../config/mock-coach.json' with { type: 'json' };
 import { Backup } from './backup.js';
 import { searchArchive } from './sandbox.js';
+import { meetingAction } from './meeting-actions.js';
 import { boardFacts } from './board-facts.js';
 
 export class Runtime {
@@ -481,12 +482,15 @@ export class Runtime {
     args: Record<string, unknown>,
     runRole = 'coach',
     context?: { fen: string; pgn: string; version: number },
+    acceptedMeetingActionKey?: string,
   ) {
     if (
       runRole !== 'coach' &&
       ['propose_record_update', 'revise_prompt', 'propose_app_change'].includes(name)
     )
       return { staged: true, reviewRequired: true };
+    const acceptedAction = meetingAction(this.store, acceptedMeetingActionKey, name, args);
+    if (acceptedAction?.complete) return acceptedAction.result;
     let workspace = this.store.workspace();
     const mutations = [
       'start_activity',
@@ -725,8 +729,8 @@ export class Runtime {
           typeof args.gameId === 'string' &&
           typeof args.text === 'string' &&
           args.text.length <= 12000
-        )
-          return this.store.updateIndex(
+        ) {
+          const result = this.store.updateIndex(
             args.gameId,
             args.text,
             Array.isArray(args.themes)
@@ -740,23 +744,32 @@ export class Runtime {
                   .slice(0, 30)
               : [],
           );
+          acceptedAction?.finish(result);
+          return result;
+        }
         const paths: Record<string, string> = {
           profile: 'profile/current.md',
-          diary: `diary/${new Date().toISOString().slice(0, 10)}.md`,
+          diary: `diary/${acceptedAction?.day ?? new Date().toISOString().slice(0, 10)}.md`,
           plan: 'plans/current.md',
           index: 'games/coach-notes.md',
         };
         const path = paths[String(args.target)];
         if (!path || typeof args.text !== 'string' || args.text.length > 12000)
           throw new Error('Invalid record update.');
-        const before = existsSync(this.store.path(path)) ? this.store.read(path) : '';
-        this.store.write(
-          path,
-          before + '\n\n' + args.text + '\n\nEvidence: ' + JSON.stringify(args.evidence),
-        );
-        this.store.event('record_revision', { path, ...args });
-        return { ok: true };
+        const content = args.text + '\n\nEvidence: ' + JSON.stringify(args.evidence);
+        if (acceptedAction) acceptedAction.append(path, content);
+        else {
+          const before = existsSync(this.store.path(path)) ? this.store.read(path) : '';
+          this.store.write(path, before + '\n\n' + content);
+        }
+        return this.store.transaction(() => {
+          this.store.event('record_revision', { path, ...args });
+          const result = { ok: true };
+          acceptedAction?.finish(result);
+          return result;
+        });
       }
+
       case 'revise_prompt': {
         if (
           typeof args.target !== 'string' ||
@@ -768,30 +781,40 @@ export class Runtime {
         const current = this.store.get<string>('prompt:' + args.target) ?? 'default';
         if (args.parentVersion !== current)
           throw new Error('Prompt version changed; read current prompt before revising.');
-        const id = randomUUID();
-        this.store.write(
-          `prompts/history/${id}.json`,
-          JSON.stringify({
-            at: new Date().toISOString(),
-            ...args,
-            parent: current,
-            previousText: this.prompts(args.target),
-          }),
-        );
+        const id = acceptedAction?.id ?? randomUUID();
+        const historyPath = `prompts/history/${id}.json`;
+        if (!existsSync(this.store.path(historyPath)))
+          this.store.write(
+            historyPath,
+            JSON.stringify({
+              at: new Date().toISOString(),
+              ...args,
+              parent: current,
+              previousText: this.prompts(args.target),
+            }),
+          );
         this.store.write(`prompts/current/${args.target}.md`, args.text);
-        this.store.put('prompt:' + args.target, id);
-        return { id };
+        return this.store.transaction(() => {
+          this.store.put('prompt:' + args.target, id);
+          const result = { id };
+          acceptedAction?.finish(result);
+          return result;
+        });
       }
       case 'propose_app_change': {
         const path = 'backlog/app-improvements.md';
-        this.store.write(
-          path,
-          this.store.read(path) +
-            '\n\n' +
-            JSON.stringify({ id: randomUUID(), at: new Date().toISOString(), ...args }),
-        );
-        return { recorded: true };
+        const content = JSON.stringify({
+          id: acceptedAction?.id ?? randomUUID(),
+          at: new Date().toISOString(),
+          ...args,
+        });
+        if (acceptedAction) acceptedAction.append(path, content);
+        else this.store.write(path, this.store.read(path) + '\n\n' + content);
+        const result = { recorded: true };
+        acceptedAction?.finish(result);
+        return result;
       }
+
       case 'record_intervention':
         this.store.event('assistance', { ...args, version: workspace.version });
         return { recorded: true };

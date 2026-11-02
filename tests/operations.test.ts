@@ -327,3 +327,44 @@ void test('runtime setup preserves existing supervisor policy and executable on 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+void test('daily failure checkpoint identifies redacted stage and request-budget cause', async () => {
+  const { CoachFailure } = await import('../server/coach.js');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'lasso-failure-stage-'));
+  let proposals = 0,
+    critiques = 0,
+    commits = 0;
+  const callbacks: DailyCallbacks = {
+    snapshot: async () => ({ frozen: true }),
+    propose: async () => {
+      proposals++;
+      return 'Retain plan';
+    },
+    critique: async () => {
+      critiques++;
+      if (critiques === 1)
+        throw new CoachFailure('request_budget', 'Coach turn exhausted its model request budget.');
+      return { accepted: true, text: 'Supported' };
+    },
+    revise: async () => 'Unused',
+    commit: async () => {
+      commits++;
+    },
+  };
+  try {
+    await assert.rejects(new DailyJobs(directory, callbacks).runDay('2026-10-31'));
+    const checkpoint = JSON.parse(await readFile(path.join(directory, '2026-10-31.json'), 'utf8'));
+    assert.deepEqual(checkpoint.failure, {
+      stage: 'critique:1',
+      code: 'request_budget',
+      message: 'Coach turn exhausted its model request budget.',
+    });
+    const result = await new DailyJobs(directory, callbacks).runDay('2026-10-31');
+    assert.equal(result?.failure, undefined);
+    assert.equal(proposals, 1);
+    assert.equal(critiques, 2);
+    assert.equal(commits, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

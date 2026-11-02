@@ -137,10 +137,23 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
         for (const [index, action] of (proposal.actions ?? []).entries()) {
           const key = `meeting-action:${meeting.day}:${index}`;
           if (runtime.store.get(key)) continue;
-          await runtime.tool(action.name, action.args);
+          await runtime.tool(action.name, action.args, 'coach', undefined, key);
           runtime.store.put(key, true);
         }
-      runtime.store.write(`diary/${meeting.day}.md`, report + unresolved);
+      const diaryUpdates = accepted
+        ? proposal.actions
+            .filter(
+              (action) => action.name === 'propose_record_update' && action.args.target === 'diary',
+            )
+            .map(
+              (action) =>
+                `${String(action.args.text)}\n\nEvidence: ${JSON.stringify(action.args.evidence)}`,
+            )
+            .join('\n\n')
+        : '';
+      const diary =
+        report + (diaryUpdates ? '\n\nAccepted diary updates:\n' + diaryUpdates : '') + unresolved;
+      runtime.store.write(`diary/${meeting.day}.md`, diary);
       runtime.store.transaction(() => {
         runtime.store.put('meeting:' + meeting.day, meeting);
         runtime.store.put('journal', [
