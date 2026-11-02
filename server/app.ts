@@ -285,7 +285,7 @@ export function createApp(
           try {
             controller.enqueue(
               new TextEncoder().encode(
-                `data: ${JSON.stringify({ version: runtime.store.workspace().version, revision: Number((runtime.store.db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM events').get() as { id: number }).id) })}\n\n`,
+                `data: ${JSON.stringify({ toolRevision: runtime.toolRevision, version: runtime.store.workspace().version, revision: Number((runtime.store.db.prepare('SELECT COALESCE(MAX(id),0) AS id FROM events').get() as { id: number }).id) })}\n\n`,
               ),
             );
           } catch {

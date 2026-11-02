@@ -4,6 +4,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Chess } from 'chess.js';
+import type { ToolActivity } from '../src/lib/chat.js';
 import { CoachRuntime, redactCoachText, type CoachContext } from '../server/coach.js';
 import { analysePosition, enginePosition, legalUci } from '../server/engine.js';
 
@@ -66,7 +67,20 @@ void test('restricted Pi mock executes the real tool boundary and preserves nati
   try {
     const fakeKey = `AIza${'x'.repeat(35)}`;
     assert.equal(redactCoachText(`key=${fakeKey}`), 'key=[REDACTED]');
-    const lesson = await runtime.run(`Show me an example ${fakeKey}`, context);
+    const activity: ToolActivity[] = [];
+    const lesson = await runtime.run(`Show me an example ${fakeKey}`, context, 'coach', (event) =>
+      activity.push(event),
+    );
+    assert.deepEqual(
+      activity.map((event) => [event.name, event.status]),
+      [
+        ['show_demonstration', 'running'],
+        ['show_demonstration', 'complete'],
+        ['publish_coaching', 'running'],
+        ['publish_coaching', 'complete'],
+      ],
+    );
+    assert.equal(activity[0].id, activity[1].id);
     assert.ok(lesson.text.length > 0);
     assert.equal(lesson.actions[0]?.name, 'show_demonstration');
     assert.equal(lesson.actions[0]?.args.title, 'Explore a legal continuation');

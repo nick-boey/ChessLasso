@@ -37,7 +37,7 @@ Board and conversation are the core interface on desktop and mobile. All player 
 
 Name: ChessLasso. Supportive, clear and specific coaching; a Ted Lasso persona is not required. Simple board and chat, informed by En Croissant interactions.
 
-The interface is a compact application workspace. Coach-controlled task headings/subtitles are dynamic lesson content. No promotional copy, opponent metadata, manual New game or individual-game download controls. Move entry uses icons for play and notation with accessible labels. Group conversation by move and scroll to new coaching instructions after accepted moves.
+The interface is a compact application workspace. Coach-controlled task headings/subtitles are dynamic lesson content. No promotional copy, opponent metadata, manual New game or individual-game download controls. Move entry uses icons for play and notation with accessible labels. Group conversation by move, scroll to the bottom for new messages and tool activity, and offer a return-to-bottom button while scrolled up. Tool calls appear as individual status rows; the composer has no quick-action buttons.
 
 ## Evidence on Hand
 

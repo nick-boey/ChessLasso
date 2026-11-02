@@ -1,3 +1,4 @@
+import type { ToolActivity } from '../src/lib/chat.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,6 +24,7 @@ export class Runtime {
   backup: Backup;
   private tail: Promise<unknown> = Promise.resolve();
   listeners = new Set<() => void>();
+  toolRevision = 0;
   engine?: {
     play(fen: string, pgn?: string, skill?: number): Promise<string>;
     analyze(fen: string): Promise<unknown>;
@@ -248,7 +250,10 @@ export class Runtime {
       initialPly,
       profile: this.store.read('profile/current.md').slice(-12000),
       plan: this.store.read('plans/current.md').slice(-8000),
-      recentMessages: workspace.conversations.at(-1)?.messages.slice(-4),
+      recentMessages: workspace.conversations
+        .at(-1)
+        ?.messages.filter((message) => message.role !== 'tool')
+        .slice(-4),
       promptVersions: Object.fromEntries(
         ['coach', 'assistant-coach', 'consolidation', 'planner', 'retro'].map((name) => [
           name,
@@ -267,7 +272,32 @@ export class Runtime {
         runRole: role,
       },
       role as CoachRole,
+      role === 'coach' || role === 'question-feedback'
+        ? (activity) => this.recordToolActivity(activity)
+        : undefined,
     );
+  }
+  recordToolActivity(activity: ToolActivity) {
+    const workspace = this.store.workspace();
+    const existing = workspace.conversations
+      .flatMap((item) => item.messages)
+      .find((message) => message.tool?.id === activity.id);
+    if (existing) existing.tool = activity;
+    else
+      workspace.conversations.at(-1)!.messages.push({
+        id:
+          Math.max(
+            0,
+            ...workspace.conversations.flatMap((item) =>
+              item.messages.map((message) => message.id),
+            ),
+          ) + 1,
+        role: 'tool',
+        text: '',
+        tool: activity,
+      });
+    this.toolRevision++;
+    this.save(workspace, 'tool_activity', activity);
   }
   async chat(message: string, version: number, id: string, reviewPly?: number) {
     message = redactCoachText(message);
@@ -339,7 +369,13 @@ export class Runtime {
         );
       else
         workspace.conversations.at(-1)!.messages.push({
-          id: messageId + 1,
+          id:
+            Math.max(
+              0,
+              ...workspace.conversations.flatMap((item) =>
+                item.messages.map((message) => message.id),
+              ),
+            ) + 1,
           role: 'coach',
           text,
           action: result.action as string,

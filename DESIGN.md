@@ -269,7 +269,7 @@ Position-context labels, current-game move buttons and session numbers use tabul
 
 The desktop header is 56px tall. The centered main container has a maximum width of 1160px and padding of 12px 16px. The board/conversation grid uses `minmax(0, 1.1fr) minmax(340px, 1fr)` with a 16px gap. A compact task heading and subtitle sit above the square board, with Flip aligned alongside. A compact current-game history panel follows 8px below the board, then a single input/play/notation row follows 8px below history. Opponent metadata, manual New game and individual-game download controls are absent from this workspace.
 
-The coach panel stretches alongside the board, capped at 840px, with a scrolling transcript and bottom composer. Its header uses 10px 12px padding, the transcript uses 8px 12px with a 160px minimum height, and composer controls use 8px 10px padding. Message spacing is 10px. Position sections use 4px top and 12px bottom padding; a hairline context label precedes each group. The newest section occupies at least the transcript's full height so its instructions can align at the top.
+The coach panel stretches alongside the board, capped at 840px, with a scrolling transcript and bottom composer. Its header uses 10px 12px padding, the transcript uses 8px 12px with a 160px minimum height, and composer controls use 8px 10px padding. Message spacing is 10px. Position sections use 4px top and 12px bottom padding; a hairline context label precedes each group. Sections retain their natural height; new content scrolls to the bottom.
 
 Below 1080px the practice grid gap becomes 24px and the coach minimum column is 320px; the header's prototype tag hides. Below 760px the header wraps navigation onto a 38px full-width row and hides the profile avatar. Both practice and reading layouts become a single column with 16px gaps and 12px main gutters. The order is task, board, current-game history, move entry, coach. The coach panel has a 360px minimum and 560px maximum height. The move row's play and notation targets grow from 40px columns to 44px square controls. The 1500px media rule preserves the 12px main top padding.
 
@@ -277,7 +277,7 @@ Reading surfaces retain a `1.65fr / minmax(280px, 1fr)` desktop grid with a 16px
 
 ## Elevation & Depth
 
-Resting work surfaces are flat: white paper, fine borders and tonal insets create hierarchy without card shadows. Only native dialogs use the ambient shadow `0 16px 60px #152e3b26` and the dark petrol scrim. A dialog arrives over 180ms with `cubic-bezier(0.16, 1, 0.3, 1)`, moving from 8px below at 0.8 opacity to rest. Reduced-motion CSS removes animations and transitions and restores automatic scrolling. Chessground separately disables its 180ms piece animation when reduced motion is requested at mount. Each new player or coach message triggers transcript scrolling toward its start, smooth by default and instant under reduced motion. New position sections without messages target their context instead. Mobile also brings the coach panel into view; scrolling does not take keyboard focus from the active input.
+Resting work surfaces are flat: white paper, fine borders and tonal insets create hierarchy without card shadows. Only native dialogs use the ambient shadow `0 16px 60px #152e3b26` and the dark petrol scrim. A dialog arrives over 180ms with `cubic-bezier(0.16, 1, 0.3, 1)`, moving from 8px below at 0.8 opacity to rest. Reduced-motion CSS removes animations and transitions and restores automatic scrolling. Chessground separately disables its 180ms piece animation when reduced motion is requested at mount. Each player message, coach reply, tool update and new position section scrolls the transcript to the bottom immediately. Resizing keeps the bottom anchored when already there. A named Scroll to bottom button floats above the composer while the learner is scrolled up. Mobile also brings the coach panel into view; scrolling does not take keyboard focus from the active input.
 
 **The Flat Workspace Rule.** Reserve ambient elevation and a scrim for dialogs; ordinary panels use borders and tone.
 
@@ -309,15 +309,15 @@ The wrapping SAN move buttons use tabular 12px labels, 5px corners, 5px 7px padd
 
 Navigation shows the position and last-move highlight after the selected ply without changing the live game. Each move label includes its move number and SAN, and the timeline supports a nonstandard starting position. While reviewing, algebraic entry and Play are disabled and the field says “Return to latest move to play”. Latest restores live entry. The chat placeholder identifies the reviewed move, and coaching requests carry that reviewed position. A new game resets review to its latest position. History remains local to the current game.
 
-### Quick actions and disclosures
+### Chat controls and disclosures
 
-Hint, Observe / Resume coaching and Example are bordered, 5px-rounded action chips with compact 10px text. They wrap when necessary and take a faint green hover fill. The prototype tag is a noninteractive status disclosure, not a section eyebrow. Preserve the scripted-coach disclosure below the composer.
+The composer has no quick-action chips. Learners request hints, examples and observation through messages. The Scroll to bottom button uses a down-arrow icon, white surface, hairline border, 7px corners and a 44px minimum height. The prototype tag is a noninteractive status disclosure, not a section eyebrow. Preserve the scripted-coach disclosure below the composer.
 
 ### Coach panel and position conversations
 
 The coach panel is white paper with a hairline boundary and panel rounding. Its simplified header contains a small Coach label, optional Observing state and availability dot. Coach messages remain on the paper; learner messages use a 9px-rounded tonal inset with a 10px left indent and 7px 10px padding. Message text wraps safely at 13px with 1.6 line height.
 
-Each position owns a conversation section, introduced by a tabular move-context label and hairline divider. Accepted moves append a new section. A reactive message key targets the newest player or coach message after rendering, including follow-ups within the same position; an empty section targets its position context. Long replies open at their beginning, with the remaining content available through transcript scrolling. Earlier discussion remains attached to its original position; subsequent messages and quick actions append to the current section. In Observe mode an empty new section displays Observing. Conversation updates remain polite live announcements, and scroll behavior honors reduced motion.
+Each position owns a conversation section, introduced by a tabular move-context label and hairline divider. Accepted moves append a new section. Conversation updates scroll to the bottom after rendering, including long replies and tool activity. Earlier discussion remains attached to its original position; subsequent messages append to the current section. Each tool call has its own compact row with a status icon and plain-language label, such as Read board or Read coaching notes. Running and failed calls show explicit status text; completed calls show a check. Tool rows persist in conversation history and update in place as the coach works. In Observe mode an empty new section displays Observing. Conversation updates remain polite live announcements, and scroll behavior honors reduced motion.
 
 ### Markdown messages
 
@@ -340,7 +340,7 @@ Chessground supplies the brown checker and Cburnett pieces. Boards are view-only
 - **Do** preserve keyboard focus, visible or accessible labels and reduced-motion behavior.
 - **Do** keep move validation, icon-based notation help and rejected input close to entry.
 - **Do** keep the selected history move visible and clearly marked, preserve the live game during review, and require Latest before playing.
-- **Do** attach follow-ups to their position and reveal each new player or coach message from its beginning.
+- **Do** attach follow-ups to their position and scroll to the bottom for new messages and tool updates, with a return button when scrolled up.
 - **Do** preserve semantic Markdown structure with compact message typography, wrapping code and readable tables.
 - **Do** disclose scripted coaching and illustrative data in functional copy.
 - **Do** use the existing plain CSS layers and imported Chessground material.
