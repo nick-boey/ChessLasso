@@ -56,9 +56,12 @@ runtime.coach = new CoachRuntime({
     version: runtime.store.get<string>('prompt:' + role) ?? 'default',
   }),
   invokeTool: async (name, args, context) =>
-    context.runRole === 'question-feedback' && name === 'inspect_board'
-      ? context
-      : runtime.tool(name, args, typeof context.runRole === 'string' ? context.runRole : 'coach'),
+    runtime.tool(
+      name,
+      args,
+      typeof context.runRole === 'string' ? context.runRole : 'coach',
+      context,
+    ),
   beforePaidCall: () => {
     pendingReservations.push(runtime.store.reserve(0.25));
   },
