@@ -386,6 +386,7 @@
         game: GameState;
         played: string;
         note: string;
+        reviewPly?: number;
         workspace: any;
         demonstration?: typeof demo;
       }>('/api/move', {
@@ -395,6 +396,7 @@
         notation,
       });
       restore(result.workspace);
+      if (result.reviewPly !== undefined) reviewPly = result.reviewPly;
       pendingMove = undefined;
       if (result.demonstration) {
         demo = result.demonstration;
@@ -427,7 +429,11 @@
     thinking = true;
     try {
       const result = await api<
-        CoachResponse & { workspace: any; demonstration?: typeof demo }
+        CoachResponse & {
+          workspace: any;
+          demonstration?: typeof demo;
+          reviewPly?: number;
+        }
       >('/api/coach', {
         message: text,
         fen: game.fen,
@@ -442,6 +448,7 @@
       }
       if (result.demonstration) demo = result.demonstration;
       restore(result.workspace);
+      if (result.reviewPly !== undefined) reviewPly = result.reviewPly;
     } catch (reason) {
       chatError = (reason as Error).message;
       chat = text;

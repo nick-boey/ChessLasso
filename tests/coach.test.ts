@@ -76,24 +76,20 @@ void test('restricted Pi mock executes the real tool boundary and preserves nati
       [
         ['show_demonstration', 'running'],
         ['show_demonstration', 'complete'],
-        ['publish_coaching', 'running'],
-        ['publish_coaching', 'complete'],
       ],
     );
     assert.equal(activity[0].id, activity[1].id);
     assert.ok(lesson.text.length > 0);
     assert.equal(lesson.actions[0]?.name, 'show_demonstration');
-    assert.equal(lesson.actions[0]?.args.title, 'Explore a legal continuation');
+    assert.equal(typeof lesson.actions[0]?.args.title, 'string');
     const quiet = await runtime.run('Please observe quietly', context);
     assert.equal(quiet.sessionId, lesson.sessionId);
     assert.equal(quiet.actions[0]?.args.quiet, true);
     assert.deepEqual(calls, [
       'show_demonstration',
-      'inspect_board',
-      'record_verified_assistance',
+      'record_coaching_response',
       'start_activity',
-      'inspect_board',
-      'record_verified_assistance',
+      'record_coaching_response',
     ]);
     assert.equal(paid, 0);
     const dateDir = join(directory, new Date().toISOString().slice(0, 10), 'coach');

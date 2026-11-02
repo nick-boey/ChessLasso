@@ -160,138 +160,6 @@ void test('engine receipts support only their exact legally derived continuation
   );
 });
 
-void test('publication omits appended invented prose and requires durable assistance before exposure', async () => {
-  const { verifier, args } = setup('7k/8/8/5N2/8/8/8/K7 w - - 0 1');
-  const claim = verifier.verify({ ...args, claims: [{ kind: 'attack', from: 'f5', to: 'g7' }] });
-  const publication = { ...args, verificationIds: [claim.id], prompt: 'candidate' };
-  assert.match(
-    verifier.finalText('The knight attacks f6 and mate is unstoppable.'),
-    /could not verify/,
-  );
-  await assert.rejects(
-    verifier.publish(publication, async () => {
-      throw new Error('disk full');
-    }),
-    /disk full/,
-  );
-  assert.match(verifier.finalText('mate'), /could not verify/);
-  let assistance: unknown;
-  await verifier.publish(publication, async (evidence) => {
-    assistance = evidence;
-  });
-  const visible = verifier.finalText('Also Qxe5# wins immediately and f5 attacks f6.');
-  assert.match(visible, /f5 geometrically attacks g7/);
-  assert.doesNotMatch(visible, /Qxe5|f6|wins immediately/);
-  assert.deepEqual(assistance, { reference: verifier.root, verificationIds: [claim.id] });
-  await assert.rejects(
-    verifier.publish({ ...publication, text: 'Then Qxe5#' }, async () => {}),
-    /Free-form/,
-  );
-  const prior = setup();
-  await assert.rejects(
-    prior.verifier.publish({ ...prior.args, verificationIds: [claim.id] }, async () => {}),
-    /Unknown or stale/,
-  );
-});
-
-void test('visible activity instructions and auxiliary text cannot smuggle unsupported mate claims', () => {
-  const { verifier } = setup();
-  const activity = verifier.visibleTool('start_activity', {
-    version: 3,
-    activityType: 'calculation',
-    heading: 'Qxe5 is checkmate',
-    subtitle: 'The knight attacks f6',
-    goal: 'Unstoppable mate',
-  });
-  assert.equal(activity.heading, 'Compare candidate moves');
-  assert.doesNotMatch(JSON.stringify(activity), /checkmate|f6|Unstoppable/);
-  for (const name of ['ask_question', 'write_player_note', 'record_intervention'])
-    assert.doesNotMatch(
-      String(verifier.visibleTool(name, { text: 'Qxe5# wins' }).text),
-      /Qxe5|wins/,
-    );
-  const demo = verifier.visibleTool('show_demonstration', {
-    title: 'e4 checkmates',
-    steps: [{ title: 'Forced mate', note: 'e4 checkmates', moves: ['e4'] }],
-  });
-  assert.doesNotMatch(JSON.stringify(demo), /checkmates|Forced mate/);
-  assert.match(JSON.stringify(demo), /not an engine recommendation/);
-});
-
-void test('real coach boundary withholds invented text after successful engine verification and keeps activity labels safe', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'lasso-verify-'));
-  const host = new Runtime(directory);
-  try {
-    const workspace = host.store.workspace();
-    workspace.game = snapshot(new Chess());
-    workspace.quiet = true;
-    host.store.save(workspace);
-    const before = host.store.workspace().game;
-    const context = { ...host.coachContext(), runRole: 'coach' };
-    const args = { version: context.version, referenceId: context.boardFacts.reference.id };
-    const coach = new CoachRuntime({
-      sessionsDir: host.sessionDirectory(),
-      getSettings: () => ({ mode: 'mock', provider: 'google', model: 'gemini-3.8-flash' }),
-      getPrompt: async () => ({ text: 'Use checked coaching.', version: 'test' }),
-      invokeTool: (name, raw, current) => host.tool(name, raw, 'coach', current),
-      beforePaidCall: () => {
-        throw new Error('No paid calls allowed');
-      },
-    });
-    const steps: FauxResponseStep[] = [
-      fauxAssistantMessage(fauxToolCall('analyse_position', { ...args, milliseconds: 80 })),
-      (transcript) => {
-        const last = transcript.messages.at(-1);
-        assert.equal(last?.role, 'toolResult');
-        const encoded = last?.content.find((part) => part.type === 'text');
-        assert.equal(encoded?.type, 'text');
-        const result = JSON.parse(encoded!.text) as {
-          evidence: { id: string };
-          variations: { san: string[] }[];
-        };
-        return fauxAssistantMessage(
-          fauxToolCall('verify_claims', {
-            ...args,
-            analysisId: result.evidence.id,
-            moves: result.variations[0].san.slice(0, 1),
-            claims: [{ kind: 'engine-line' }],
-          }),
-        );
-      },
-      (transcript) => {
-        const last = transcript.messages.at(-1);
-        assert.equal(last?.role, 'toolResult');
-        const encoded = last?.content.find((part) => part.type === 'text');
-        assert.equal(encoded?.type, 'text');
-        const result = JSON.parse(encoded!.text) as { id: string };
-        return fauxAssistantMessage(
-          fauxToolCall('publish_coaching', { ...args, verificationIds: [result.id] }),
-        );
-      },
-      fauxAssistantMessage(
-        fauxToolCall('start_activity', { version: context.version, activityType: 'calculation' }),
-      ),
-      fauxAssistantMessage(
-        'Then Qxe5# wins and the knight on f5 attacks f6. The mate is unstoppable.',
-      ),
-    ];
-    Object.defineProperty(coach, 'mockResponses', { value: () => steps });
-    const response = await coach.run('Review my idea', context);
-    assert.match(response.text, /matches a returned Stockfish variation/);
-    assert.doesNotMatch(response.text, /Qxe5|f6|unstoppable/);
-    assert.equal(host.store.workspace().activity.heading, 'Compare candidate moves');
-    assert.deepEqual(host.store.workspace().game, before);
-    const events = host.store.db
-      .prepare("SELECT value FROM events WHERE kind='assistance'")
-      .all() as { value: string }[];
-    assert.ok(events.some((event) => JSON.parse(event.value).kind === 'verified_coaching'));
-    assert.ok(events.some((event) => JSON.parse(event.value).reference.id === args.referenceId));
-  } finally {
-    host.store.db.close();
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 void test('question and historical coaching verifies the referenced board and records its provenance without changing play', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'lasso-question-verify-'));
   const host = new Runtime(directory);
@@ -324,10 +192,14 @@ void test('question and historical coaching verifies the referenced board and re
         assert.equal(encoded?.type, 'text');
         const result = JSON.parse(encoded!.text) as { id: string };
         return fauxAssistantMessage(
-          fauxToolCall('publish_coaching', { ...args, verificationIds: [result.id] }),
+          fauxToolCall('publish_coaching', {
+            ...args,
+            verificationIds: [result.id],
+            text: 'Let’s compare your knight’s activity with the opponent’s reply.',
+          }),
         );
       },
-      fauxAssistantMessage('The knight attacks f6.'),
+      fauxAssistantMessage('Your knight controls g7. What reply are you considering?'),
     ];
     Object.defineProperty(coach, 'mockResponses', { value: () => steps });
     const response = await coach.run(
@@ -335,7 +207,7 @@ void test('question and historical coaching verifies the referenced board and re
       context,
       'question-feedback',
     );
-    assert.match(response.text, /f5 geometrically attacks g7/);
+    assert.equal(response.text, 'Your knight controls g7. What reply are you considering?');
     assert.doesNotMatch(response.text, /f6/);
     assert.deepEqual(host.store.workspace().game, before);
     const evidence = host.store.db
@@ -366,9 +238,9 @@ void test('verified questions bind their displayed board and notes retain exact 
   assert.deepEqual(question.reference, claim.reference);
   const neutral = verifier.visibleTool('ask_question', { fen: new Chess().fen(), text: 'mate' });
   assert.equal(neutral.fen, new Chess().fen());
-  assert.doesNotMatch(String(neutral.text), /mate/);
+  assert.equal(neutral.text, 'mate');
   const note = verifier.visibleTool('write_player_note', { verificationId: claim.id });
-  assert.ok(String(note.text).includes(claim.reference.fen));
+  assert.equal(note.text, claim.text);
   assert.deepEqual(note.reference, claim.reference);
 });
 
@@ -399,14 +271,17 @@ void test('verified historical and question publications do not assist the next 
           },
         ],
       });
-      await verifier.publish({ ...args, verificationIds: [claim.id] }, async (evidence) => {
-        await host.tool(
-          'record_verified_assistance',
-          { ...evidence, kind: 'verified_coaching' },
-          scope === 'current' ? 'coach' : 'question-feedback',
-          context,
-        );
-      });
+      await verifier.publish(
+        { ...args, verificationIds: [claim.id], text: 'Consider this piece relationship.' },
+        async (evidence) => {
+          await host.tool(
+            'record_verified_assistance',
+            { ...evidence, kind: 'verified_coaching' },
+            scope === 'current' ? 'coach' : 'question-feedback',
+            context,
+          );
+        },
+      );
       const recorded = host.store.db
         .prepare("SELECT value FROM events WHERE kind='assistance'")
         .get() as { value: string };

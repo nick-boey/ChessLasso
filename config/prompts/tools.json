@@ -1,5 +1,70 @@
 [
   {
+    "name": "read_prompt",
+    "label": "Read teaching configuration",
+    "description": "Read the effective teaching prompt, active version and source before revising it. Archive overrides take precedence over repository defaults.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "enum": [
+            "coach",
+            "assistant-coach",
+            "assistant",
+            "consolidation",
+            "planner",
+            "retro",
+            "question-feedback",
+            "after-move",
+            "opponent",
+            "game-complete",
+            "daily"
+          ]
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "choose_next_activity",
+    "label": "Choose next training activity",
+    "description": "Choose a plan-backed next activity after a game. Cite an exact plan excerpt and write your own explanation of why this step helps. Usually review a useful historical ply. If continuing assessment games, state what is being measured and then set up an independent standard game with quiet=true.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "enum": ["review", "assessment-game", "practice"]
+        },
+        "planExcerpt": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 1000
+        },
+        "reviewPly": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measurement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": ["version", "kind", "planExcerpt", "explanation"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "inspect_board",
     "label": "Inspect board",
     "description": "Read deterministic boardFacts for the referenced current, historical or question position. Includes geometric attacks, defenders, sliding blockers, relative/absolute pins, legal moves and king escapes. Facts are tied to full FEN and version; never reuse after a position change. Attacks and pins are not legal moves. Inspection does not authorize revealing hints in observation mode; record assistance before disclosure.",
@@ -123,8 +188,8 @@
   },
   {
     "name": "publish_coaching",
-    "label": "Publish checked coaching",
-    "description": "Publish host-rendered verified facts using same-turn verification IDs, optionally followed by a neutral teaching prompt. Free-form final assistant prose is withheld from players. Records assistance before verified advice is exposed; observation mode still requires the player to request hints.",
+    "label": "Publish coaching",
+    "description": "Optionally publish your own coaching text with same-turn checked claim IDs. Checks support only the referenced claims, not the whole message. No fixed wording or templates are applied. A normal final assistant response is also shown directly and recorded as agent-authored assistance.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -144,18 +209,20 @@
             "maxLength": 100
           }
         },
-        "prompt": {
-          "enum": ["candidate", "reasoning", "retry", "observation", "acknowledgement"]
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16000
         }
       },
-      "required": ["version", "referenceId", "verificationIds"],
+      "required": ["version", "referenceId", "text"],
       "additionalProperties": false
     }
   },
   {
     "name": "start_activity",
     "label": "Set training activity",
-    "description": "Set a legal position or full game, or update the task heading/subtitle and assistance policy without changing the board. Replacing a board archives its continuation. Select an activityType for host-owned headings/instructions; free-form tactical headings are not displayed.",
+    "description": "Set the position, player side, task and assistance policy. Write your own short heading and subtitle. Changing a board archives the completed/interrupted game; post-game replacement requires a plan-backed decision first.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -175,6 +242,14 @@
         },
         "activityType": {
           "enum": ["free-play", "calculation", "endgame", "observation"]
+        },
+        "heading": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 300
         }
       },
       "required": ["version"],
@@ -279,7 +354,7 @@
   {
     "name": "ask_question",
     "label": "Ask player",
-    "description": "Ask a short question, optionally attaching a separate legal board and target skill. Visible text is host-rendered from verificationId, or a neutral prompt; arbitrary tactical prose is withheld.",
+    "description": "Ask a short question, optionally attaching a separate legal board and target skill. Write your own player-facing text. Optional verificationId links a specific checked claim; it does not certify all prose. The question board must match that receipt if one is supplied.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -307,7 +382,7 @@
   {
     "name": "write_player_note",
     "label": "Write position note",
-    "description": "Attach a brief note to a move/position without taking keyboard focus. Revealing help requires a prior intervention record. Visible text is host-rendered from verificationId, or a neutral prompt; arbitrary tactical prose is withheld.",
+    "description": "Attach a brief note to a move/position without taking keyboard focus. Revealing help requires a prior intervention record. Write your own player-facing text. Optional verificationId links a specific checked claim; it does not certify all prose. The question board must match that receipt if one is supplied.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -426,12 +501,24 @@
   {
     "name": "revise_prompt",
     "label": "Revise teaching prompt",
-    "description": "Create a versioned teaching prompt revision for the next turn. Cannot change application permissions, credentials, budget or deployment controls.",
+    "description": "Version any teaching prompt using its parentVersion from read_prompt. Store reason and prior text for audit/rollback. Applies on subsequent turns. Cannot revise tool schemas, permissions, credentials, budget or deployment controls.",
     "parameters": {
       "type": "object",
       "properties": {
         "target": {
-          "enum": ["coach", "assistant-coach", "consolidation", "planner", "retro"]
+          "enum": [
+            "coach",
+            "assistant-coach",
+            "assistant",
+            "consolidation",
+            "planner",
+            "retro",
+            "question-feedback",
+            "after-move",
+            "opponent",
+            "game-complete",
+            "daily"
+          ]
         },
         "text": {
           "type": "string",
@@ -484,7 +571,7 @@
   {
     "name": "record_intervention",
     "label": "Record assistance",
-    "description": "Persist revealing assistance before exposing it to the player. Preserve timing, reason and position provenance. Visible text is host-rendered from verificationId, or a neutral prompt; arbitrary tactical prose is withheld.",
+    "description": "Persist revealing assistance before exposing it to the player. Preserve timing, reason and position provenance. Write your own player-facing text. Optional verificationId links a specific checked claim; it does not certify all prose. The question board must match that receipt if one is supplied.",
     "parameters": {
       "type": "object",
       "properties": {

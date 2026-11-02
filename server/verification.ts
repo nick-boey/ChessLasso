@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Chess, type Square } from 'chess.js';
-import { playNotation } from '../src/lib/chess.js';
+import { loadGame, playNotation } from '../src/lib/chess.js';
 import { boardFacts, positionReference, type PositionReference } from './board-facts.js';
 import { analysePosition, type EngineRequest, type EngineResult } from './engine.js';
 
@@ -27,31 +27,21 @@ export class VerificationError extends Error {
     super(message);
   }
 }
-const neutralPrompts = {
-  candidate: 'Which legal move would you consider, and what reply do you expect?',
-  reasoning: 'Talk me through your candidate and the reply you expect.',
-  retry: 'I could not verify that explanation. Let’s inspect the position and try again.',
-  observation: 'Take your time. I will wait for your move.',
-  acknowledgement: 'Your request is recorded. Choose a candidate move when you are ready.',
-};
-const activities = {
-  'free-play': {
-    heading: 'Explore the position',
-    subtitle: 'Choose a legal candidate and explain your idea.',
-  },
-  calculation: {
-    heading: 'Compare candidate moves',
-    subtitle: 'Name a candidate and the reply you expect.',
-  },
-  endgame: {
-    heading: 'Activate your king',
-    subtitle: 'Explore legal king moves in this position.',
-  },
-  observation: {
-    heading: 'Play an independent game',
-    subtitle: 'Take your time and choose your own moves.',
-  },
-};
+/** Report the actual result without relying on the model or supplying a move hint. */
+export function describeGameOver(pgn: string) {
+  const board = loadGame(pgn);
+  if (!board.isGameOver()) throw new VerificationError('false-claim', 'This game has not ended.');
+  const result = board.isCheckmate()
+    ? `${board.turn() === 'w' ? 'Black' : 'White'} won by checkmate.`
+    : board.isStalemate()
+      ? 'The game is drawn by stalemate.'
+      : board.isInsufficientMaterial()
+        ? 'The game is drawn by insufficient material.'
+        : board.isThreefoldRepetition()
+          ? 'The game is drawn by threefold repetition.'
+          : 'The game is drawn by the fifty-move rule.';
+  return `Game over. ${result}`;
+}
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new VerificationError('false-claim', 'Provide a structured claim.');
@@ -163,8 +153,17 @@ export class CoachingVerification {
             `${from} does not geometrically attack ${to}.`,
           );
         const names = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+        const target = facts.pieces.find((entry) => entry.square === to);
+        const relationship = !target
+          ? 'controls'
+          : target.color === piece.color
+            ? 'defends'
+            : 'attacks';
+        const destination = target
+          ? `the ${target.color === 'w' ? 'white' : 'black'} ${names[target.type]} on ${to}`
+          : to;
         sentences.push(
-          `The ${piece.color === 'w' ? 'white' : 'black'} ${names[piece.type]} on ${from} geometrically attacks ${to}. An attack does not by itself prove a legal move.`,
+          `The ${piece.color === 'w' ? 'white' : 'black'} ${names[piece.type]} on ${from} ${relationship} ${destination}.`,
         );
       } else if (claim.kind === 'check' || claim.kind === 'checkmate') {
         if (!(claim.kind === 'check' ? facts.check : facts.checkmate))
@@ -199,14 +198,10 @@ export class CoachingVerification {
             'This exact continuation is not supported by the referenced engine variation.',
           );
         analysisId = evidence.id;
-        sentences.push(
-          'This continuation matches a returned Stockfish variation; it is bounded analysis, not a guarantee against every reply.',
-        );
+        sentences.push('Stockfish suggests examining this continuation.');
       } else throw new VerificationError('false-claim', 'Unknown structured claim.');
     }
-    const prefix = derived.moves.length
-      ? `After the legal continuation ${derived.moves.join(' ')}, `
-      : '';
+    const prefix = derived.moves.length ? `After ${derived.moves.join(' ')}, ` : '';
     const evidence: ClaimEvidence = {
       id: randomUUID(),
       root: this.root,
@@ -233,6 +228,9 @@ export class CoachingVerification {
       })
       .join('\n\n');
   }
+  get checkedClaimIds() {
+    return [...this.claims.keys()];
+  }
   async publish(
     args: Record<string, unknown>,
     beforePublish: (evidence: {
@@ -240,42 +238,43 @@ export class CoachingVerification {
       verificationIds: unknown;
     }) => Promise<void>,
   ) {
-    const text = this.textFor(args);
-    const prompt =
-      args.prompt === undefined ? '' : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
-    if (prompt === undefined)
-      throw new VerificationError('unverified-output', 'Choose a supported teaching prompt.');
+    this.textFor({ ...args, verificationIds: args.verificationIds ?? [] });
     if (
       Object.keys(args).some(
-        (key) => !['version', 'referenceId', 'verificationIds', 'prompt'].includes(key),
+        (key) => !['version', 'referenceId', 'verificationIds', 'text'].includes(key),
       )
     )
       throw new VerificationError(
         'unverified-output',
-        'Free-form tactical prose cannot be published as verified.',
+        'Supply your own coaching text and optional checked claim references.',
       );
-    await beforePublish({ reference: this.root, verificationIds: args.verificationIds });
-    this.published = [text, prompt].filter(Boolean).join('\n\n') || neutralPrompts.candidate;
-    return { text: this.published, reference: this.root, verificationIds: args.verificationIds };
+    if (typeof args.text !== 'string' || !args.text.trim() || args.text.length > 16000)
+      throw new VerificationError(
+        'unverified-output',
+        'Provide a nonempty coaching message of at most 16000 characters.',
+      );
+    await beforePublish({ reference: this.root, verificationIds: args.verificationIds ?? [] });
+    this.published = args.text;
+    return {
+      text: this.published,
+      reference: this.root,
+      verificationIds: args.verificationIds ?? [],
+      classification: 'agent-authored',
+    };
   }
-  finalText(_untrustedText: string) {
-    return this.published ?? neutralPrompts.retry;
+  finalText(text: string) {
+    const response = text.trim() ? text : this.published;
+    if (!response?.trim())
+      throw new VerificationError('unverified-output', 'The coach did not provide a response.');
+    if (response.length > 16000)
+      throw new VerificationError('unverified-output', 'The coaching response is too long.');
+    return response;
   }
-  /** All provider-authored labels/notes are replaced with host-owned text before a visible tool mutates state. */
+  /** Validate mechanics and references without rewriting the agent's teaching language. */
   visibleTool(name: string, args: Record<string, unknown>) {
     if (name === 'start_activity') {
-      const type = args.activityType === undefined ? 'free-play' : args.activityType;
-      if (typeof type !== 'string' || !(type in activities))
-        throw new VerificationError('unverified-output', 'Choose a supported activity type.');
-      const labels = activities[type as keyof typeof activities];
-      const {
-        heading: _heading,
-        subtitle: _subtitle,
-        goal: _goal,
-        activityType: _type,
-        ...safe
-      } = args;
-      return { ...safe, ...labels };
+      const { activityType: _type, ...safe } = args;
+      return safe;
     }
     if (name === 'show_demonstration') {
       const board = new Chess(
@@ -286,11 +285,7 @@ export class CoachingVerification {
       return {
         ...args,
         initialFen: board.fen(),
-        title:
-          board.fen() === this.root.fen
-            ? 'Explore a legal continuation'
-            : 'Explore an independent example',
-        steps: args.steps.map((raw, index) => {
+        steps: args.steps.map((raw) => {
           const step = object(raw);
           const branch = new Chess(board.fen());
           if (!Array.isArray(step.moves) || step.moves.length > 40)
@@ -308,8 +303,8 @@ export class CoachingVerification {
             }
           });
           return {
-            title: `Legal example ${index + 1}`,
-            note: 'Explore this legal sequence; it is not an engine recommendation.',
+            title: typeof step.title === 'string' ? step.title : '',
+            note: typeof step.note === 'string' ? step.note : '',
             moves,
           };
         }),
@@ -331,13 +326,12 @@ export class CoachingVerification {
           'A verified question must display its exact evidence position.',
         );
       const { verificationId: _id, ...safe } = args;
-      const text = receipt
-        ? name === 'write_player_note'
-          ? `Verified for position ${receipt.reference.fen}: ${receipt.text}`
-          : receipt.text
-        : name === 'record_intervention'
-          ? neutralPrompts.acknowledgement
-          : neutralPrompts.candidate;
+      const text = typeof args.text === 'string' ? args.text : receipt?.text;
+      if (typeof text !== 'string' || !text.trim() || text.length > 4000)
+        throw new VerificationError(
+          'unverified-output',
+          'Provide your own brief question or note.',
+        );
       return {
         ...safe,
         text,

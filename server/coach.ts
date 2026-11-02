@@ -19,11 +19,9 @@ import {
 import { InMemoryCredentialStore, type JsonObject } from '@earendil-works/pi-ai';
 import type { TSchema } from 'typebox';
 import { CoachingVerification, VerificationError } from './verification.js';
-import { positionReference } from './board-facts.js';
-const verificationReference = (context: CoachContext) =>
-  positionReference(context.fen, context.version).id;
 import definitions from '../config/prompts/tools.json' with { type: 'json' };
 import mock from '../config/mock-coach.json' with { type: 'json' };
+import type { NextActivity } from './training.js';
 
 export type CoachRole =
   | 'coach'
@@ -82,6 +80,7 @@ export interface CoachHost {
 
 export const coachingToolNames = definitions.map((tool) => tool.name);
 const reviewTools = new Set([
+  'read_prompt',
   'inspect_board',
   'analyse_position',
   'verify_claims',
@@ -280,6 +279,22 @@ export class CoachRuntime {
     };
     const actions: CoachAction[] = [];
     let verification = new CoachingVerification(context);
+    const refreshVerification = (fresh: Record<string, unknown>) => {
+      if (
+        typeof fresh.fen !== 'string' ||
+        typeof fresh.pgn !== 'string' ||
+        typeof fresh.version !== 'number'
+      )
+        throw new Error('Host did not supply a referenced position.');
+      if (fresh.fen === verification.root.fen && fresh.version === verification.root.version)
+        return false;
+      verification = new CoachingVerification({
+        fen: fresh.fen,
+        pgn: fresh.pgn,
+        version: fresh.version,
+      });
+      return true;
+    };
     const playerFacing = role === 'coach' || role === 'question-feedback';
     const allowed = definitions.filter(
       (tool) =>
@@ -333,19 +348,7 @@ export class CoachRuntime {
           if (readKey && cachedReads.has(readKey)) result = cachedReads.get(readKey);
           else if (tool.name === 'inspect_board') {
             result = await this.host.invokeTool(tool.name, args, context);
-            const fresh = dictionary(result);
-            if (
-              typeof fresh.fen !== 'string' ||
-              typeof fresh.pgn !== 'string' ||
-              typeof fresh.version !== 'number'
-            )
-              throw new Error('Host did not supply a referenced position.');
-            if (fresh.fen !== verification.root.fen || fresh.version !== verification.root.version)
-              verification = new CoachingVerification({
-                fen: fresh.fen,
-                pgn: fresh.pgn,
-                version: fresh.version,
-              });
+            refreshVerification(dictionary(result));
           } else if (tool.name === 'analyse_position')
             result = await verification.analyse(args, signal);
           else if (tool.name === 'verify_claims') result = verification.verify(args);
@@ -355,7 +358,9 @@ export class CoachRuntime {
                 'record_verified_assistance',
                 {
                   ...evidence,
-                  kind: 'verified_coaching',
+                  kind: 'coaching_publication',
+                  classification: 'agent-authored',
+                  verificationScope: 'referenced-claims-only',
                 },
                 { ...context, fen: verification.root.fen, version: verification.root.version },
               );
@@ -473,20 +478,38 @@ export class CoachRuntime {
         );
       if (terminalFailure) throw terminalFailure;
       const rawText = session.getLastAssistantText() ?? '';
+      const boardSetup = actions.some(
+        (action) => action.name === 'start_activity' && typeof action.args.fen === 'string',
+      );
+      let current = context;
+      if (playerFacing && (boardSetup || actions.some((action) => action.name === 'play_move'))) {
+        const fresh = dictionary(await this.host.invokeTool('inspect_board', {}, context));
+        refreshVerification(fresh);
+        current = { ...context, ...fresh };
+      }
+      const decision = actions.find((action) => action.name === 'choose_next_activity')?.result as
+        | NextActivity
+        | undefined;
+      if (playerFacing && context.postGamePlanning) {
+        if (!decision)
+          throw new Error(
+            'The coach must choose the next activity using the current training plan.',
+          );
+        if (decision.kind !== 'review' && !boardSetup)
+          throw new Error('Set up the chosen next activity before announcing it.');
+      }
       const text = playerFacing ? verification.finalText(rawText) : rawText;
-      if (
-        playerFacing &&
-        text !== rawText &&
-        !actions.some((action) => action.name === 'publish_coaching')
-      )
+      if (playerFacing)
         await this.host.invokeTool(
-          'record_verification_failure',
+          'record_coaching_response',
           {
-            category: 'unverified-output',
+            kind: 'coach_response',
+            classification: 'agent-authored',
             reference: verification.root,
-            reason: 'Unstructured assistant text was withheld from the player.',
+            verificationIds: verification.checkedClaimIds,
+            verificationScope: 'referenced-claims-only',
           },
-          context,
+          current,
         );
       if (!text.trim() && !actions.length) throw new Error('Coach returned no usable response.');
       return {
@@ -512,6 +535,19 @@ export class CoachRuntime {
   private mockResponses(message: string, context: CoachContext, role: CoachRole) {
     const text = message.toLowerCase();
     if (role !== 'coach') return [fauxAssistantMessage(mock.default)];
+    if (context.postGamePlanning)
+      return [
+        fauxAssistantMessage(
+          fauxToolCall('choose_next_activity', {
+            version: context.version,
+            kind: 'review',
+            explanation:
+              'Let’s review the finish and compare your intention with the opponent’s reply.',
+            planExcerpt: String(context.plan).slice(0, 500),
+          }),
+        ),
+        fauxAssistantMessage('Review the completed game.'),
+      ];
     const version = context.version;
     let response = mock.default;
     let name = 'ask_question';
@@ -525,6 +561,8 @@ export class CoachRuntime {
       name = 'start_activity';
       args = {
         version,
+        heading: mock.activities.observation.heading,
+        subtitle: mock.activities.observation.subtitle,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         activityType: 'observation',
         quiet: true,
@@ -532,10 +570,10 @@ export class CoachRuntime {
     } else if (/endgame|simpler position|set.*position/.test(text)) {
       response = mock.position;
       name = 'start_activity';
-      args = { version, fen: '8/7k/8/8/8/4K3/4P3/8 w - - 0 1', activityType: 'endgame' };
+      args = { version, fen: '8/7k/8/8/8/4K3/4P3/8 w - - 0 1', ...mock.activities.endgame };
     } else if (/focus on|training goal|change.*heading/.test(text)) {
       name = 'start_activity';
-      args = { version, activityType: 'calculation' };
+      args = { version, ...mock.activities.calculation };
     } else if (/quiet|less interrupt|keep thinking|observe/.test(text)) {
       response = mock.quiet;
       name = 'start_activity';
@@ -557,14 +595,6 @@ export class CoachRuntime {
     }
     return [
       fauxAssistantMessage(fauxToolCall(name, args as JsonObject)),
-      fauxAssistantMessage(
-        fauxToolCall('publish_coaching', {
-          version,
-          referenceId: verificationReference(context),
-          verificationIds: [],
-          prompt: /quiet|observe/.test(text) ? 'observation' : 'candidate',
-        }),
-      ),
       fauxAssistantMessage(response),
     ];
   }
