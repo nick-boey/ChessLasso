@@ -126,8 +126,16 @@ void test('finite request budget reserves terminal output, caches duplicate read
       return { text: 'synthetic page', nextOffset: null };
     },
     mockResponses: () => [
-      fauxAssistantMessage(fauxToolCall('read_history', { path: 'meetings/day/teaching.jsonl' })),
-      fauxAssistantMessage(fauxToolCall('read_history', { path: 'meetings/day/teaching.jsonl' })),
+      fauxAssistantMessage(
+        fauxToolCall('read_history', {
+          path: `meetings/2026-10-31/evidence/${'a'.repeat(64)}/teaching.jsonl`,
+        }),
+      ),
+      fauxAssistantMessage(
+        fauxToolCall('read_history', {
+          path: `meetings/2026-10-31/evidence/${'a'.repeat(64)}/teaching.jsonl`,
+        }),
+      ),
       (transcript) => {
         const final = transcript.messages.at(-1);
         assert.equal(final?.role, 'system');

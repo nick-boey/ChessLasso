@@ -304,9 +304,13 @@ export class CoachRuntime {
         if (signal?.aborted) throw new Error('Coach tool cancelled.');
         let args = redactValue(dictionary(raw));
         this.host.onEvent?.({ type: 'tool_start', tool: tool.name });
-        const readKey = ['read_history', 'search_history'].includes(tool.name)
-          ? JSON.stringify([tool.name, args])
-          : undefined;
+        const readKey =
+          role !== 'coach' &&
+          tool.name === 'read_history' &&
+          typeof args.path === 'string' &&
+          /^meetings\/\d{4}-\d{2}-\d{2}\/evidence\/[a-f0-9]{64}\//.test(args.path)
+            ? JSON.stringify([tool.name, args])
+            : undefined;
         let result: unknown;
         try {
           if (['analyse_position', 'verify_claims', 'publish_coaching'].includes(tool.name)) {
