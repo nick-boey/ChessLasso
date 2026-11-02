@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
+import { parseProposal, qualityProposal, qualityReport } from './meeting-quality.js';
 import type { Runtime } from './runtime.js';
 import { coachingDay, type DailyCallbacks } from './jobs.js';
 
@@ -14,21 +15,21 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
     }),
     propose: async (day, evidence) => {
       if (runtime.store.workspace().mode === 'mock')
-        return JSON.stringify({
-          text: `Mock consolidation for ${day}: insufficient independent evidence; preserve the baseline plan.`,
-          actions: [],
-        });
+        return JSON.stringify(
+          qualityProposal(
+            {
+              text: `Mock consolidation for ${day}: insufficient independent evidence; preserve the baseline plan.`,
+              actions: [],
+            },
+            evidence,
+          ),
+        );
       const result = await runtime.paid(
         JSON.stringify({ day, evidence }),
         runtime.store.workspace(),
         'consolidation',
       );
-      return JSON.stringify({
-        text: result.text,
-        actions: result.actions.filter((action) =>
-          ['propose_record_update', 'revise_prompt', 'propose_app_change'].includes(action.name),
-        ),
-      });
+      return JSON.stringify(qualityProposal(result, evidence));
     },
     critique: async (day, evidence, proposal, round) => {
       if (runtime.store.workspace().mode === 'mock')
@@ -51,27 +52,19 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
         runtime.store.workspace(),
         'consolidation',
       );
-      return JSON.stringify({
-        text: result.text,
-        actions: result.actions.filter((action) =>
-          ['propose_record_update', 'revise_prompt', 'propose_app_change'].includes(action.name),
-        ),
-      });
+      return JSON.stringify(qualityProposal(result, evidence));
     },
     commit: async (meeting) => {
       if (runtime.store.get('meeting:' + meeting.day)) return;
-      let proposal: { text: string; actions: { name: string; args: Record<string, unknown> }[] };
-      try {
-        proposal = JSON.parse(meeting.proposal ?? '{}');
-      } catch {
-        proposal = { text: meeting.proposal ?? 'No change.', actions: [] };
-      }
+      const proposal = parseProposal(meeting.proposal ?? 'No change.');
       const accepted = meeting.rounds.at(-1)?.critique.accepted === true;
+      const engineering = qualityReport(proposal, accepted);
+      const report = proposal.text + engineering;
       const unresolved = accepted
         ? ''
         : '\n\nUnresolved assistant-coach objections: retain the prior training plan and profile pending further evidence.';
       runtime.store.write(`meetings/${meeting.day}/proposal.json`, meeting.proposal ?? '{}');
-      runtime.store.write(`meetings/${meeting.day}/decision.md`, proposal.text + unresolved);
+      runtime.store.write(`meetings/${meeting.day}/decision.md`, report + unresolved);
       runtime.store.write(
         `meetings/${meeting.day}/critique.jsonl`,
         meeting.rounds.map((round) => JSON.stringify(round)).join('\n'),
@@ -83,12 +76,12 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
           await runtime.tool(action.name, action.args);
           runtime.store.put(key, true);
         }
-      runtime.store.write(`diary/${meeting.day}.md`, proposal.text + unresolved);
+      runtime.store.write(`diary/${meeting.day}.md`, report + unresolved);
       runtime.store.transaction(() => {
         runtime.store.put('meeting:' + meeting.day, meeting);
         runtime.store.put('journal', [
           ...(runtime.store.get<string[]>('journal') ?? []),
-          `${meeting.day}\n${proposal.text}${unresolved}`,
+          `${meeting.day}\n${report}${unresolved}`,
         ]);
         runtime.store.event('meeting', { day: meeting.day, accepted });
       });
