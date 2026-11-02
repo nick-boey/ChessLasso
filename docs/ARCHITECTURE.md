@@ -16,6 +16,8 @@ The coach supplies a task heading and subtitle as activity data, independently o
 
 ## Runtime and credentials
 
+Player-facing coaching combines same-turn checked chess facts with optional general teaching principles and focused questions through `publish_coaching`. Attack, defence and square-control descriptions use ordinary chess language; verification terminology remains internal. The coach can teach an opening principle, ask about intention, compare plans or reflect on a game without inventing a tactical claim to obtain a receipt. Provider-authored tactical prose is still withheld, and unsupported claims, stale receipts and publication before assistance recording remain rejected. Coaching and historical-feedback prompts include examples for choosing a relevant teaching purpose rather than repeating one move question.
+
 Use Svelte, Hono/Node, the native TypeScript 7 compiler, Vite and Oxc with plain modern CSS. Embed the restricted Pi host and supervise Stockfish over UCI. Keep operational state in local SQLite and export the human-readable coaching records into their separate private repository.
 
 `GEMINI_API_KEY` is available in the operator's local `.env` for the implementation phase after prototyping. Do not read it into the frontend, prefix it with `VITE_`, embed it in configuration/history, print it, or copy it to any repository. Load it only in the server's live-provider setup. Mock mode stays deterministic even when the key exists; live mode must be an explicit runtime choice. Validate real tool calling with a minimal server-side smoke check after integrating Pi.

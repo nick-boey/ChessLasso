@@ -28,11 +28,34 @@ export class VerificationError extends Error {
   }
 }
 const neutralPrompts = {
-  candidate: 'Which legal move would you consider, and what reply do you expect?',
-  reasoning: 'Talk me through your candidate and the reply you expect.',
+  candidate: 'What would you play here, and what is your idea?',
+  reasoning: 'Talk me through your plan and the reply you expect.',
   retry: 'I could not verify that explanation. Let’s inspect the position and try again.',
   observation: 'Take your time. I will wait for your move.',
   acknowledgement: 'Your request is recorded. Choose a candidate move when you are ready.',
+};
+const teachingPrinciples = {
+  opening:
+    'In the opening, aim to control the center, bring your pieces into play and get your king safe.',
+  'opponent-threats':
+    'Before choosing your move, look at your opponent’s checks, captures and threats.',
+  'loose-pieces': 'Check which pieces are undefended on both sides before committing to a move.',
+  tradeoffs:
+    'Compare what each move improves with what it gives up. A useful plan also accounts for your opponent’s response.',
+  'king-activity':
+    'In an endgame, consider how your king can support your pieces and pawns while staying safe.',
+  reflection: 'Let’s take one useful lesson from this game and test it in later practice.',
+};
+const teachingQuestions = {
+  intention: 'What would you like your next move to achieve?',
+  'opponent-reply': 'What is your opponent’s strongest reply to the move you’re considering?',
+  'changed-position': 'What changed after your opponent’s last move?',
+  'compare-candidates':
+    'Which two moves would you compare, and what is the main trade-off between them?',
+  'explain-choice': 'What makes your preferred move fit your plan?',
+  recall: 'What idea from earlier practice could help you here?',
+  'review-intention':
+    'What were you trying to achieve with your move, and what reply did you expect?',
 };
 /** Report the actual result without relying on the model or supplying a move hint. */
 export function describeGameOver(pgn: string) {
@@ -202,8 +225,17 @@ export class CoachingVerification {
             `${from} does not geometrically attack ${to}.`,
           );
         const names = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+        const target = facts.pieces.find((entry) => entry.square === to);
+        const relationship = !target
+          ? 'controls'
+          : target.color === piece.color
+            ? 'defends'
+            : 'attacks';
+        const destination = target
+          ? `the ${target.color === 'w' ? 'white' : 'black'} ${names[target.type]} on ${to}`
+          : to;
         sentences.push(
-          `The ${piece.color === 'w' ? 'white' : 'black'} ${names[piece.type]} on ${from} geometrically attacks ${to}. An attack does not by itself prove a legal move.`,
+          `The ${piece.color === 'w' ? 'white' : 'black'} ${names[piece.type]} on ${from} ${relationship} ${destination}.`,
         );
       } else if (claim.kind === 'check' || claim.kind === 'checkmate') {
         if (!(claim.kind === 'check' ? facts.check : facts.checkmate))
@@ -238,14 +270,10 @@ export class CoachingVerification {
             'This exact continuation is not supported by the referenced engine variation.',
           );
         analysisId = evidence.id;
-        sentences.push(
-          'This continuation matches a returned Stockfish variation; it is bounded analysis, not a guarantee against every reply.',
-        );
+        sentences.push('Stockfish suggests examining this continuation.');
       } else throw new VerificationError('false-claim', 'Unknown structured claim.');
     }
-    const prefix = derived.moves.length
-      ? `After the legal continuation ${derived.moves.join(' ')}, `
-      : '';
+    const prefix = derived.moves.length ? `After ${derived.moves.join(' ')}, ` : '';
     const evidence: ClaimEvidence = {
       id: randomUUID(),
       root: this.root,
@@ -280,6 +308,49 @@ export class CoachingVerification {
     }) => Promise<void>,
   ) {
     const text = this.textFor(args);
+    let principle = '';
+    let question = '';
+    if (args.teaching !== undefined) {
+      const teaching = args.teaching;
+      if (!teaching || typeof teaching !== 'object' || Array.isArray(teaching))
+        throw new VerificationError(
+          'unverified-output',
+          'Choose a supported teaching principle or question.',
+        );
+      const selection = teaching as Record<string, unknown>;
+      if (
+        !Object.keys(selection).length ||
+        Object.keys(selection).some((key) => !['principle', 'question'].includes(key))
+      )
+        throw new VerificationError(
+          'unverified-output',
+          'Choose supported teaching fields; free-form tactical prose is not accepted.',
+        );
+      if (selection.principle !== undefined) {
+        if (
+          typeof selection.principle !== 'string' ||
+          !Object.hasOwn(teachingPrinciples, selection.principle)
+        )
+          throw new VerificationError(
+            'unverified-output',
+            'Choose a supported teaching principle.',
+          );
+        principle = teachingPrinciples[selection.principle as keyof typeof teachingPrinciples];
+      }
+      if (selection.question !== undefined) {
+        if (
+          typeof selection.question !== 'string' ||
+          !Object.hasOwn(teachingQuestions, selection.question)
+        )
+          throw new VerificationError('unverified-output', 'Choose a supported teaching question.');
+        question = teachingQuestions[selection.question as keyof typeof teachingQuestions];
+        if (args.prompt !== undefined)
+          throw new VerificationError(
+            'unverified-output',
+            'Choose one teaching question or neutral prompt.',
+          );
+      }
+    }
     let prompt =
       args.prompt === 'position'
         ? describePosition(this.root.fen)
@@ -294,13 +365,16 @@ export class CoachingVerification {
       (args.prompt === undefined ||
         args.prompt === 'candidate' ||
         args.prompt === 'reasoning' ||
-        args.prompt === 'observation') &&
+        args.prompt === 'observation' ||
+        question) &&
       loadGame(this.context.pgn).isGameOver()
-    )
+    ) {
       prompt = describeGameOver(this.context.pgn);
+      question = '';
+    }
     if (
       Object.keys(args).some(
-        (key) => !['version', 'referenceId', 'verificationIds', 'prompt'].includes(key),
+        (key) => !['version', 'referenceId', 'verificationIds', 'prompt', 'teaching'].includes(key),
       )
     )
       throw new VerificationError(
@@ -308,7 +382,9 @@ export class CoachingVerification {
         'Free-form tactical prose cannot be published as verified.',
       );
     await beforePublish({ reference: this.root, verificationIds: args.verificationIds });
-    this.published = [text, prompt].filter(Boolean).join('\n\n') || neutralPrompts.candidate;
+    this.published =
+      [text, principle, question || prompt].filter(Boolean).join('\n\n') ||
+      neutralPrompts.candidate;
     return { text: this.published, reference: this.root, verificationIds: args.verificationIds };
   }
   finalText(_untrustedText: string) {

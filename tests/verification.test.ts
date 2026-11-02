@@ -48,6 +48,45 @@ function setup(fen = new Chess().fen(), version = 3) {
   return { verifier, args: { version, referenceId: verifier.root.id } };
 }
 
+void test('checked coaching explains the relevant piece relationship without legal-move boilerplate', async () => {
+  const { verifier, args } = setup('7k/2p5/8/8/5B2/8/7P/K7 w - - 0 1');
+  const claim = verifier.verify({ ...args, claims: [{ kind: 'attack', from: 'f4', to: 'c7' }] });
+  await verifier.publish(
+    { ...args, verificationIds: [claim.id], teaching: { question: 'opponent-reply' } },
+    async () => {},
+  );
+  const text = verifier.finalText('Invented checkmate claim');
+  assert.match(text, /bishop on f4 attacks the black pawn on c7/i);
+  assert.match(text, /opponent.*reply/i);
+  assert.doesNotMatch(text, /geometric|legal move|Invented|checkmate/);
+});
+
+void test('the coach can teach a general principle and ask about intent without inventing a tactical fact', async () => {
+  const { verifier, args } = setup();
+  const response = await verifier.publish(
+    { ...args, verificationIds: [], teaching: { principle: 'opening', question: 'intention' } },
+    async () => {},
+  );
+  assert.match(response.text, /center/);
+  assert.match(response.text, /pieces/);
+  assert.match(response.text, /achieve/);
+  assert.doesNotMatch(response.text, /geometric|legal move|could not verify/);
+  await assert.rejects(
+    verifier.publish(
+      { ...args, verificationIds: [], teaching: { question: 'intention', text: 'Qxe5# wins' } },
+      async () => {},
+    ),
+    /supported teaching|Free-form/,
+  );
+  await assert.rejects(
+    verifier.publish(
+      { ...args, verificationIds: [], teaching: { principle: 'invented-mate' } },
+      async () => {},
+    ),
+    /supported teaching/,
+  );
+});
+
 for (const quiet of [true, false]) {
   void test(`a coach board reset gives relevant opening guidance (quiet=${quiet})`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'lasso-reset-'));
@@ -362,7 +401,7 @@ void test('publication omits appended invented prose and requires durable assist
     assistance = evidence;
   });
   const visible = verifier.finalText('Also Qxe5# wins immediately and f5 attacks f6.');
-  assert.match(visible, /f5 geometrically attacks g7/);
+  assert.match(visible, /f5 controls g7/);
   assert.doesNotMatch(visible, /Qxe5|f6|wins immediately/);
   assert.deepEqual(assistance, { reference: verifier.root, verificationIds: [claim.id] });
   await assert.rejects(
@@ -459,7 +498,7 @@ void test('real coach boundary withholds invented text after successful engine v
     ];
     Object.defineProperty(coach, 'mockResponses', { value: () => steps });
     const response = await coach.run('Review my idea', context);
-    assert.match(response.text, /matches a returned Stockfish variation/);
+    assert.match(response.text, /Stockfish suggests examining/);
     assert.doesNotMatch(response.text, /Qxe5|f6|unstoppable/);
     assert.equal(host.store.workspace().activity.heading, 'Compare candidate moves');
     assert.deepEqual(host.store.workspace().game, before);
@@ -517,7 +556,7 @@ void test('question and historical coaching verifies the referenced board and re
       context,
       'question-feedback',
     );
-    assert.match(response.text, /f5 geometrically attacks g7/);
+    assert.match(response.text, /f5 controls g7/);
     assert.doesNotMatch(response.text, /f6/);
     assert.deepEqual(host.store.workspace().game, before);
     const evidence = host.store.db

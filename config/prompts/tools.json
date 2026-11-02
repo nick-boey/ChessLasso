@@ -141,7 +141,7 @@
   {
     "name": "publish_coaching",
     "label": "Publish checked coaching",
-    "description": "Publish host-rendered verified facts using same-turn verification IDs, optionally followed by a neutral teaching prompt. Use prompt position with empty verificationIds to explain the current board setup without making an unrelated tactical claim. Free-form final assistant prose is withheld from players. Records assistance before verified advice is exposed; observation mode still requires the player to request hints.",
+    "description": "Publish checked chess facts in plain language and/or a useful general teaching principle and question. Use teaching to select an opening, safety, trade-off or reflection lesson and one relevant question; no verificationIds are needed for general teaching. Do not manufacture an unrelated attack claim to fill a reply. Use a checked fact only when it helps the current lesson. Use prompt position for setup explanations. Free-form final prose is withheld; records assistance before exposure and respects observation policy.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -160,6 +160,34 @@
             "type": "string",
             "maxLength": 100
           }
+        },
+        "teaching": {
+          "type": "object",
+          "properties": {
+            "principle": {
+              "enum": [
+                "opening",
+                "opponent-threats",
+                "loose-pieces",
+                "tradeoffs",
+                "king-activity",
+                "reflection"
+              ]
+            },
+            "question": {
+              "enum": [
+                "intention",
+                "opponent-reply",
+                "changed-position",
+                "compare-candidates",
+                "explain-choice",
+                "recall",
+                "review-intention"
+              ]
+            }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
         },
         "prompt": {
           "enum": [
