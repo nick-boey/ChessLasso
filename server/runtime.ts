@@ -20,6 +20,7 @@ import { meetingAction } from './meeting-actions.js';
 import { boardFacts } from './board-facts.js';
 import { describeGameOver } from './verification.js';
 import { chooseNextActivity, type NextActivity } from './training.js';
+import { teachingPromptNames, isTeachingPrompt } from './prompts.js';
 
 export class Runtime {
   store: Store;
@@ -46,7 +47,7 @@ export class Runtime {
       ...this.store.workspace(),
       stats: this.store.stats(),
       promptVersions: Object.fromEntries(
-        ['coach', 'assistant-coach', 'consolidation', 'planner', 'retro'].map((name) => [
+        teachingPromptNames.map((name) => [
           name,
           this.store.get<string>('prompt:' + name) ?? 'default',
         ]),
@@ -292,7 +293,7 @@ export class Runtime {
         ?.messages.filter((message) => message.role !== 'tool')
         .slice(-4),
       promptVersions: Object.fromEntries(
-        ['coach', 'assistant-coach', 'consolidation', 'planner', 'retro'].map((name) => [
+        teachingPromptNames.map((name) => [
           name,
           this.store.get<string>('prompt:' + name) ?? 'default',
         ]),
@@ -595,6 +596,17 @@ export class Runtime {
     ];
     if (mutations.includes(name) && args.version !== workspace.version) throw new ConflictError();
     switch (name) {
+      case 'read_prompt': {
+        if (!isTeachingPrompt(args.target)) throw new Error('Choose a teaching prompt.');
+        return {
+          target: args.target,
+          text: this.prompts(args.target),
+          version: this.store.get<string>('prompt:' + args.target) ?? 'default',
+          source: existsSync(this.store.path(`prompts/current/${args.target}.md`))
+            ? 'archive'
+            : 'default',
+        };
+      }
       case 'choose_next_activity': {
         if (runRole !== 'coach')
           throw new Error('Only the coach chooses the next training activity.');
@@ -602,11 +614,6 @@ export class Runtime {
           ...chooseNextActivity(workspace, this.store.read('plans/current.md'), args),
           planningId: typeof context?.planningId === 'string' ? context.planningId : undefined,
         };
-        if (decision.kind === 'review')
-          workspace.activity = {
-            heading: 'Review the game',
-            subtitle: 'Reflect on your intention and the reply you expected.',
-          };
         this.store.put('next-activity:' + workspace.gameId, decision);
         this.save(workspace, 'next_activity', decision);
         return decision;
@@ -615,6 +622,7 @@ export class Runtime {
         this.store.event('coach_verification', { valid: false, ...args });
         return { recorded: true };
       case 'record_verified_assistance':
+      case 'record_coaching_response':
         if (context && context.version !== workspace.version) throw new ConflictError();
         this.store.event('assistance', {
           ...args,
@@ -906,10 +914,13 @@ export class Runtime {
 
       case 'revise_prompt': {
         if (
-          typeof args.target !== 'string' ||
-          !/^(coach|assistant-coach|consolidation|planner|retro)$/.test(args.target) ||
+          !isTeachingPrompt(args.target) ||
           typeof args.text !== 'string' ||
-          args.text.length > 16000
+          !args.text.trim() ||
+          args.text.length > 16000 ||
+          typeof args.reason !== 'string' ||
+          !args.reason.trim() ||
+          args.reason.length > 2000
         )
           throw new Error('Invalid prompt revision.');
         const current = this.store.get<string>('prompt:' + args.target) ?? 'default';
@@ -960,8 +971,7 @@ export class Runtime {
     }
   }
   undoPrompt(target: string) {
-    if (!/^(coach|assistant-coach|consolidation|planner|retro)$/.test(target))
-      throw new Error('Invalid prompt target.');
+    if (!isTeachingPrompt(target)) throw new Error('Invalid prompt target.');
     const current = this.store.get<string>('prompt:' + target);
     if (!current) throw new Error('No prompt revision to undo.');
     const revision = JSON.parse(this.store.read(`prompts/history/${current}.json`)) as {

@@ -53,7 +53,7 @@ void test('a loss during observation gets a game-over handoff without resetting 
     const saved = app.store.workspace();
     const text = saved.conversations.at(-1)?.messages.at(-1)?.text ?? '';
     assert.match(text, /Black won by checkmate/);
-    assert.match(text, /review.*next activity/i);
+    assert.doesNotMatch(text, /Would you like/);
     assert.equal(saved.game.over, true);
     assert.equal(saved.gameId, workspace.gameId);
     assert.equal(saved.game.moves.at(-1), 'Qh4#');

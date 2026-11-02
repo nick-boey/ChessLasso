@@ -11,11 +11,6 @@ export interface NextActivity {
   reviewPly?: number;
   text: string;
 }
-const measurements = {
-  'independent-decisions': 'your independent decisions',
-  'opening-principles': 'your use of opening principles',
-  calculation: 'your independent calculation',
-};
 export function chooseNextActivity(
   workspace: Workspace,
   plan: string,
@@ -30,7 +25,12 @@ export function chooseNextActivity(
     !plan.includes(args.planExcerpt)
   )
     throw new Error('Cite an exact excerpt from the current training plan.');
-  let text: string;
+  if (
+    typeof args.explanation !== 'string' ||
+    !args.explanation.trim() ||
+    args.explanation.length > 4000
+  )
+    throw new Error('Explain your choice of next activity in your own words.');
   let reviewPly: number | undefined;
   if (args.kind === 'review') {
     reviewPly =
@@ -40,25 +40,21 @@ export function chooseNextActivity(
     gameAtPly(workspace.game.pgn, reviewPly);
     if (reviewPly >= workspace.game.moves.length)
       throw new Error('Choose a position before the game ended for review.');
-    text =
-      'Let’s review this game before adding more practice. We’ll look back at the selected position: what was your intention, and which reply were you expecting?';
   } else if (args.kind === 'assessment-game') {
-    const measurement =
-      typeof args.measurement === 'string'
-        ? measurements[args.measurement as keyof typeof measurements]
-        : undefined;
-    if (!measurement) throw new Error('Specify what the next independent game will measure.');
-    text = `We’re continuing with another independent game to observe ${measurement}. I’ll hold coaching until it ends so this remains an unassisted sample, then use it to decide what to work on.`;
-  } else if (args.kind === 'practice') {
-    text =
-      'I’m choosing focused practice next, using the training plan below to set the activity rather than automatically starting another game.';
-  } else throw new Error('Choose review, assessment-game or practice.');
+    if (
+      typeof args.measurement !== 'string' ||
+      !args.measurement.trim() ||
+      args.measurement.length > 200
+    )
+      throw new Error('Specify what the next independent game will measure.');
+  } else if (args.kind !== 'practice')
+    throw new Error('Choose review, assessment-game or practice.');
   return {
     kind: args.kind,
     gameId: workspace.gameId,
     version: workspace.version,
     planHash: createHash('sha256').update(plan).digest('hex'),
     reviewPly,
-    text: `I’ve reviewed your current training plan:\n\n> ${args.planExcerpt.split('\n').join('\n> ')}\n\n${text}`,
+    text: args.explanation,
   };
 }

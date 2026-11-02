@@ -1,7 +1,6 @@
 import type { ToolActivity } from '../src/lib/chat.js';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { Chess } from 'chess.js';
 import {
   createAgentSession,
   createExtensionRuntime,
@@ -19,10 +18,7 @@ import {
 } from '@earendil-works/pi-ai/providers/faux';
 import { InMemoryCredentialStore, type JsonObject } from '@earendil-works/pi-ai';
 import type { TSchema } from 'typebox';
-import { CoachingVerification, VerificationError, describePosition } from './verification.js';
-import { positionReference } from './board-facts.js';
-const verificationReference = (context: CoachContext) =>
-  positionReference(context.fen, context.version).id;
+import { CoachingVerification, VerificationError } from './verification.js';
 import definitions from '../config/prompts/tools.json' with { type: 'json' };
 import mock from '../config/mock-coach.json' with { type: 'json' };
 import type { NextActivity } from './training.js';
@@ -84,6 +80,7 @@ export interface CoachHost {
 
 export const coachingToolNames = definitions.map((tool) => tool.name);
 const reviewTools = new Set([
+  'read_prompt',
   'inspect_board',
   'analyse_position',
   'verify_claims',
@@ -361,7 +358,9 @@ export class CoachRuntime {
                 'record_verified_assistance',
                 {
                   ...evidence,
-                  kind: 'verified_coaching',
+                  kind: 'coaching_publication',
+                  classification: 'agent-authored',
+                  verificationScope: 'referenced-claims-only',
                 },
                 { ...context, fen: verification.root.fen, version: verification.root.version },
               );
@@ -482,24 +481,12 @@ export class CoachRuntime {
       const boardSetup = actions.some(
         (action) => action.name === 'start_activity' && typeof action.args.fen === 'string',
       );
-      let discarded = false;
       let current = context;
       if (playerFacing && (boardSetup || actions.some((action) => action.name === 'play_move'))) {
         const fresh = dictionary(await this.host.invokeTool('inspect_board', {}, context));
-        discarded = refreshVerification(fresh);
+        refreshVerification(fresh);
         current = { ...context, ...fresh };
       }
-      const verifiedText = playerFacing ? verification.finalText(rawText) : rawText;
-      const setupText =
-        verification.root.fen === new Chess().fen()
-          ? current.quiet
-            ? 'A new independent game is ready. Choose your opening moves when it is your turn. I’ll observe until you ask for help.'
-            : 'A new game is ready. For your opening moves, think about controlling the center, developing your pieces and keeping your king safe. Which move would you like to try?'
-          : verifiedText;
-      let text =
-        playerFacing && boardSetup
-          ? `${describePosition(verification.root.fen, true)}\n\n${setupText}`
-          : verifiedText;
       const decision = actions.find((action) => action.name === 'choose_next_activity')?.result as
         | NextActivity
         | undefined;
@@ -510,22 +497,19 @@ export class CoachRuntime {
           );
         if (decision.kind !== 'review' && !boardSetup)
           throw new Error('Set up the chosen next activity before announcing it.');
-        text = decision.text + (boardSetup ? '\n\n' + text : '');
       }
-      if (
-        playerFacing &&
-        text !== rawText &&
-        !decision &&
-        (discarded || !actions.some((action) => action.name === 'publish_coaching'))
-      )
+      const text = playerFacing ? verification.finalText(rawText) : rawText;
+      if (playerFacing)
         await this.host.invokeTool(
-          'record_verification_failure',
+          'record_coaching_response',
           {
-            category: 'unverified-output',
+            kind: 'coach_response',
+            classification: 'agent-authored',
             reference: verification.root,
-            reason: 'Unstructured assistant text was withheld from the player.',
+            verificationIds: verification.checkedClaimIds,
+            verificationScope: 'referenced-claims-only',
           },
-          context,
+          current,
         );
       if (!text.trim() && !actions.length) throw new Error('Coach returned no usable response.');
       return {
@@ -557,6 +541,8 @@ export class CoachRuntime {
           fauxToolCall('choose_next_activity', {
             version: context.version,
             kind: 'review',
+            explanation:
+              'Let’s review the finish and compare your intention with the opponent’s reply.',
             planExcerpt: String(context.plan).slice(0, 500),
           }),
         ),
@@ -575,6 +561,8 @@ export class CoachRuntime {
       name = 'start_activity';
       args = {
         version,
+        heading: mock.activities.observation.heading,
+        subtitle: mock.activities.observation.subtitle,
         fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         activityType: 'observation',
         quiet: true,
@@ -582,10 +570,10 @@ export class CoachRuntime {
     } else if (/endgame|simpler position|set.*position/.test(text)) {
       response = mock.position;
       name = 'start_activity';
-      args = { version, fen: '8/7k/8/8/8/4K3/4P3/8 w - - 0 1', activityType: 'endgame' };
+      args = { version, fen: '8/7k/8/8/8/4K3/4P3/8 w - - 0 1', ...mock.activities.endgame };
     } else if (/focus on|training goal|change.*heading/.test(text)) {
       name = 'start_activity';
-      args = { version, activityType: 'calculation' };
+      args = { version, ...mock.activities.calculation };
     } else if (/quiet|less interrupt|keep thinking|observe/.test(text)) {
       response = mock.quiet;
       name = 'start_activity';
@@ -607,14 +595,6 @@ export class CoachRuntime {
     }
     return [
       fauxAssistantMessage(fauxToolCall(name, args as JsonObject)),
-      fauxAssistantMessage(
-        fauxToolCall('publish_coaching', {
-          version,
-          referenceId: verificationReference(context),
-          verificationIds: [],
-          prompt: /quiet|observe/.test(text) ? 'observation' : 'candidate',
-        }),
-      ),
       fauxAssistantMessage(response),
     ];
   }

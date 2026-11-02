@@ -15,6 +15,10 @@ for (const kind of ['review', 'assessment-game'] as const) {
   void test(`the coach consults the plan after an observed loss and chooses ${kind}`, async () => {
     const directory = mkdtempSync(join(tmpdir(), 'lasso-training-'));
     const host = new Runtime(directory);
+    const explanation =
+      kind === 'review'
+        ? `Our training plan says "${plan}". Let’s review the finish before another sample.`
+        : `Our training plan says "${plan}". I’m choosing another independent game to measure your opening principles.`;
     try {
       const board = new Chess();
       board.move('f3');
@@ -41,6 +45,7 @@ for (const kind of ['review', 'assessment-game'] as const) {
               fauxToolCall('choose_next_activity', {
                 version: context.version,
                 kind,
+                explanation,
                 planExcerpt: plan,
                 ...(kind === 'review' ? { reviewPly: 2 } : { measurement: 'opening-principles' }),
               }),
@@ -57,9 +62,7 @@ for (const kind of ['review', 'assessment-game'] as const) {
                   ),
                 ]
               : []),
-            fauxAssistantMessage(
-              'The e2 pawn attacks d3. This unrelated prose must remain hidden.',
-            ),
+            fauxAssistantMessage(explanation),
           ];
         },
       });
@@ -118,6 +121,7 @@ void test('post-game board replacement requires a plan-backed coach decision', a
           version: workspace.version,
           kind: 'assessment-game',
           measurement: 'opening-principles',
+          explanation: 'Continue the independent baseline assessment.',
           planExcerpt: 'Invented plan',
         },
         'coach',
@@ -132,6 +136,7 @@ void test('post-game board replacement requires a plan-backed coach decision', a
         version: workspace.version,
         kind: 'assessment-game',
         measurement: 'opening-principles',
+        explanation: 'Continue the independent baseline assessment.',
         planExcerpt: host.store.read('plans/current.md').slice(0, 200),
       },
       'coach',

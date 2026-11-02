@@ -27,36 +27,6 @@ export class VerificationError extends Error {
     super(message);
   }
 }
-const neutralPrompts = {
-  candidate: 'What would you play here, and what is your idea?',
-  reasoning: 'Talk me through your plan and the reply you expect.',
-  retry: 'I could not verify that explanation. Let’s inspect the position and try again.',
-  observation: 'Take your time. I will wait for your move.',
-  acknowledgement: 'Your request is recorded. Choose a candidate move when you are ready.',
-};
-const teachingPrinciples = {
-  opening:
-    'In the opening, aim to control the center, bring your pieces into play and get your king safe.',
-  'opponent-threats':
-    'Before choosing your move, look at your opponent’s checks, captures and threats.',
-  'loose-pieces': 'Check which pieces are undefended on both sides before committing to a move.',
-  tradeoffs:
-    'Compare what each move improves with what it gives up. A useful plan also accounts for your opponent’s response.',
-  'king-activity':
-    'In an endgame, consider how your king can support your pieces and pawns while staying safe.',
-  reflection: 'Let’s take one useful lesson from this game and test it in later practice.',
-};
-const teachingQuestions = {
-  intention: 'What would you like your next move to achieve?',
-  'opponent-reply': 'What is your opponent’s strongest reply to the move you’re considering?',
-  'changed-position': 'What changed after your opponent’s last move?',
-  'compare-candidates':
-    'Which two moves would you compare, and what is the main trade-off between them?',
-  'explain-choice': 'What makes your preferred move fit your plan?',
-  recall: 'What idea from earlier practice could help you here?',
-  'review-intention':
-    'What were you trying to achieve with your move, and what reply did you expect?',
-};
 /** Report the actual result without relying on the model or supplying a move hint. */
 export function describeGameOver(pgn: string) {
   const board = loadGame(pgn);
@@ -70,50 +40,8 @@ export function describeGameOver(pgn: string) {
         : board.isThreefoldRepetition()
           ? 'The game is drawn by threefold repetition.'
           : 'The game is drawn by the fifty-move rule.';
-  return `Game over. ${result}\n\nThe completed game is saved for review against your training plan before choosing the next activity.`;
+  return `Game over. ${result}`;
 }
-/** Explain setup using the board itself, without relying on provider-authored chess claims. */
-export function describePosition(fen: string, changed = false) {
-  const board = new Chess(fen);
-  const starting = board.fen() === new Chess().fen();
-  const introduction = changed
-    ? starting
-      ? 'The board has been reset to the standard starting position.'
-      : 'The board has been set to a new training position.'
-    : starting
-      ? 'The board shows the standard starting position.'
-      : 'The board shows a training position.';
-  const turn = `${board.turn() === 'w' ? 'White' : 'Black'} to move on move ${board.moveNumber()}.`;
-  if (starting) return `${introduction} ${turn}`;
-  const names = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
-  const pieces = (['w', 'b'] as const).map((color) => {
-    const locations = board
-      .board()
-      .flat()
-      .filter((piece) => piece?.color === color)
-      .map((piece) => `${names[piece!.type]} on ${piece!.square}`);
-    return `${color === 'w' ? 'White' : 'Black'}: ${locations.join(', ')}.`;
-  });
-  return `${introduction} ${turn}\n\n${pieces.join('\n\n')}`;
-}
-const activities = {
-  'free-play': {
-    heading: 'Explore the position',
-    subtitle: 'Choose a legal candidate and explain your idea.',
-  },
-  calculation: {
-    heading: 'Compare candidate moves',
-    subtitle: 'Name a candidate and the reply you expect.',
-  },
-  endgame: {
-    heading: 'Activate your king',
-    subtitle: 'Explore legal king moves in this position.',
-  },
-  observation: {
-    heading: 'Play an independent game',
-    subtitle: 'Take your time and choose your own moves.',
-  },
-};
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new VerificationError('false-claim', 'Provide a structured claim.');
@@ -300,6 +228,9 @@ export class CoachingVerification {
       })
       .join('\n\n');
   }
+  get checkedClaimIds() {
+    return [...this.claims.keys()];
+  }
   async publish(
     args: Record<string, unknown>,
     beforePublish: (evidence: {
@@ -307,109 +238,43 @@ export class CoachingVerification {
       verificationIds: unknown;
     }) => Promise<void>,
   ) {
-    const text = this.textFor(args);
-    let principle = '';
-    let question = '';
-    if (args.teaching !== undefined) {
-      const teaching = args.teaching;
-      if (!teaching || typeof teaching !== 'object' || Array.isArray(teaching))
-        throw new VerificationError(
-          'unverified-output',
-          'Choose a supported teaching principle or question.',
-        );
-      const selection = teaching as Record<string, unknown>;
-      if (
-        !Object.keys(selection).length ||
-        Object.keys(selection).some((key) => !['principle', 'question'].includes(key))
-      )
-        throw new VerificationError(
-          'unverified-output',
-          'Choose supported teaching fields; free-form tactical prose is not accepted.',
-        );
-      if (selection.principle !== undefined) {
-        if (
-          typeof selection.principle !== 'string' ||
-          !Object.hasOwn(teachingPrinciples, selection.principle)
-        )
-          throw new VerificationError(
-            'unverified-output',
-            'Choose a supported teaching principle.',
-          );
-        principle = teachingPrinciples[selection.principle as keyof typeof teachingPrinciples];
-      }
-      if (selection.question !== undefined) {
-        if (
-          typeof selection.question !== 'string' ||
-          !Object.hasOwn(teachingQuestions, selection.question)
-        )
-          throw new VerificationError('unverified-output', 'Choose a supported teaching question.');
-        question = teachingQuestions[selection.question as keyof typeof teachingQuestions];
-        if (args.prompt !== undefined)
-          throw new VerificationError(
-            'unverified-output',
-            'Choose one teaching question or neutral prompt.',
-          );
-      }
-    }
-    let prompt =
-      args.prompt === 'position'
-        ? describePosition(this.root.fen)
-        : args.prompt === 'game-over'
-          ? describeGameOver(this.context.pgn)
-          : args.prompt === undefined
-            ? ''
-            : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
-    if (prompt === undefined)
-      throw new VerificationError('unverified-output', 'Choose a supported teaching prompt.');
-    if (
-      (args.prompt === undefined ||
-        args.prompt === 'candidate' ||
-        args.prompt === 'reasoning' ||
-        args.prompt === 'observation' ||
-        question) &&
-      loadGame(this.context.pgn).isGameOver()
-    ) {
-      prompt = describeGameOver(this.context.pgn);
-      question = '';
-    }
+    this.textFor({ ...args, verificationIds: args.verificationIds ?? [] });
     if (
       Object.keys(args).some(
-        (key) => !['version', 'referenceId', 'verificationIds', 'prompt', 'teaching'].includes(key),
+        (key) => !['version', 'referenceId', 'verificationIds', 'text'].includes(key),
       )
     )
       throw new VerificationError(
         'unverified-output',
-        'Free-form tactical prose cannot be published as verified.',
+        'Supply your own coaching text and optional checked claim references.',
       );
-    await beforePublish({ reference: this.root, verificationIds: args.verificationIds });
-    this.published =
-      [text, principle, question || prompt].filter(Boolean).join('\n\n') ||
-      neutralPrompts.candidate;
-    return { text: this.published, reference: this.root, verificationIds: args.verificationIds };
+    if (typeof args.text !== 'string' || !args.text.trim() || args.text.length > 16000)
+      throw new VerificationError(
+        'unverified-output',
+        'Provide a nonempty coaching message of at most 16000 characters.',
+      );
+    await beforePublish({ reference: this.root, verificationIds: args.verificationIds ?? [] });
+    this.published = args.text;
+    return {
+      text: this.published,
+      reference: this.root,
+      verificationIds: args.verificationIds ?? [],
+      classification: 'agent-authored',
+    };
   }
-  finalText(_untrustedText: string) {
-    return (
-      this.published ??
-      (loadGame(this.context.pgn).isGameOver()
-        ? describeGameOver(this.context.pgn)
-        : neutralPrompts.retry)
-    );
+  finalText(text: string) {
+    const response = text.trim() ? text : this.published;
+    if (!response?.trim())
+      throw new VerificationError('unverified-output', 'The coach did not provide a response.');
+    if (response.length > 16000)
+      throw new VerificationError('unverified-output', 'The coaching response is too long.');
+    return response;
   }
-  /** All provider-authored labels/notes are replaced with host-owned text before a visible tool mutates state. */
+  /** Validate mechanics and references without rewriting the agent's teaching language. */
   visibleTool(name: string, args: Record<string, unknown>) {
     if (name === 'start_activity') {
-      const type = args.activityType === undefined ? 'free-play' : args.activityType;
-      if (typeof type !== 'string' || !(type in activities))
-        throw new VerificationError('unverified-output', 'Choose a supported activity type.');
-      const labels = activities[type as keyof typeof activities];
-      const {
-        heading: _heading,
-        subtitle: _subtitle,
-        goal: _goal,
-        activityType: _type,
-        ...safe
-      } = args;
-      return { ...safe, ...labels };
+      const { activityType: _type, ...safe } = args;
+      return safe;
     }
     if (name === 'show_demonstration') {
       const board = new Chess(
@@ -420,11 +285,7 @@ export class CoachingVerification {
       return {
         ...args,
         initialFen: board.fen(),
-        title:
-          board.fen() === this.root.fen
-            ? 'Explore a legal continuation'
-            : 'Explore an independent example',
-        steps: args.steps.map((raw, index) => {
+        steps: args.steps.map((raw) => {
           const step = object(raw);
           const branch = new Chess(board.fen());
           if (!Array.isArray(step.moves) || step.moves.length > 40)
@@ -442,8 +303,8 @@ export class CoachingVerification {
             }
           });
           return {
-            title: `Legal example ${index + 1}`,
-            note: 'Explore this legal sequence; it is not an engine recommendation.',
+            title: typeof step.title === 'string' ? step.title : '',
+            note: typeof step.note === 'string' ? step.note : '',
             moves,
           };
         }),
@@ -465,13 +326,12 @@ export class CoachingVerification {
           'A verified question must display its exact evidence position.',
         );
       const { verificationId: _id, ...safe } = args;
-      const text = receipt
-        ? name === 'write_player_note'
-          ? `Verified for position ${receipt.reference.fen}: ${receipt.text}`
-          : receipt.text
-        : name === 'record_intervention'
-          ? neutralPrompts.acknowledgement
-          : neutralPrompts.candidate;
+      const text = typeof args.text === 'string' ? args.text : receipt?.text;
+      if (typeof text !== 'string' || !text.trim() || text.length > 4000)
+        throw new VerificationError(
+          'unverified-output',
+          'Provide your own brief question or note.',
+        );
       return {
         ...safe,
         text,
