@@ -57,7 +57,7 @@ void test('restricted Pi mock executes the real tool boundary and preserves nati
     }),
     invokeTool: async (name, args) => {
       calls.push(name);
-      return { ok: true, version: context.version, ...args };
+      return name === 'inspect_board' ? context : { ok: true, version: context.version, ...args };
     },
     beforePaidCall: () => {
       paid++;
@@ -69,11 +69,18 @@ void test('restricted Pi mock executes the real tool boundary and preserves nati
     const lesson = await runtime.run(`Show me an example ${fakeKey}`, context);
     assert.ok(lesson.text.length > 0);
     assert.equal(lesson.actions[0]?.name, 'show_demonstration');
-    assert.equal(lesson.actions[0]?.args.title, 'Bring your pieces into the game');
+    assert.equal(lesson.actions[0]?.args.title, 'Explore a legal continuation');
     const quiet = await runtime.run('Please observe quietly', context);
     assert.equal(quiet.sessionId, lesson.sessionId);
     assert.equal(quiet.actions[0]?.args.quiet, true);
-    assert.deepEqual(calls, ['show_demonstration', 'start_activity']);
+    assert.deepEqual(calls, [
+      'show_demonstration',
+      'inspect_board',
+      'record_verified_assistance',
+      'start_activity',
+      'inspect_board',
+      'record_verified_assistance',
+    ]);
     assert.equal(paid, 0);
     const dateDir = join(directory, new Date().toISOString().slice(0, 10), 'coach');
     const filename = (await readdir(dateDir)).find((file) => file.endsWith('.jsonl'));
