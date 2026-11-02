@@ -140,6 +140,14 @@ void test('game-over publication requires an actually finished board', async () 
   );
   assert.match(response.text, /White won by checkmate/);
   assert.match(response.text, /review.*next activity/);
+  const defaultReply = await finished.verifier.publish(
+    { ...finished.args, verificationIds: [], prompt: 'candidate' },
+    async () => {},
+  );
+  assert.match(defaultReply.text, /White won by checkmate/);
+  assert.doesNotMatch(defaultReply.text, /Which legal move/);
+  const unpublished = setup('7k/6Q1/5K2/8/8/8/8/8 b - - 0 1');
+  assert.match(unpublished.verifier.finalText('invented advice'), /White won by checkmate/);
 });
 
 void test('a board change invalidates a reply published for the previous position', async () => {
@@ -328,7 +336,7 @@ void test('engine receipts support only their exact legally derived continuation
 });
 
 void test('publication omits appended invented prose and requires durable assistance before exposure', async () => {
-  const { verifier, args } = setup('7k/8/8/5N2/8/8/8/K7 w - - 0 1');
+  const { verifier, args } = setup('7k/8/8/5N2/8/8/7P/K7 w - - 0 1');
   const claim = verifier.verify({ ...args, claims: [{ kind: 'attack', from: 'f5', to: 'g7' }] });
   const publication = { ...args, verificationIds: [claim.id], prompt: 'candidate' };
   assert.match(

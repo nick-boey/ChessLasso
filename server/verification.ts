@@ -280,7 +280,7 @@ export class CoachingVerification {
     }) => Promise<void>,
   ) {
     const text = this.textFor(args);
-    const prompt =
+    let prompt =
       args.prompt === 'position'
         ? describePosition(this.root.fen)
         : args.prompt === 'game-over'
@@ -290,6 +290,14 @@ export class CoachingVerification {
             : neutralPrompts[args.prompt as keyof typeof neutralPrompts];
     if (prompt === undefined)
       throw new VerificationError('unverified-output', 'Choose a supported teaching prompt.');
+    if (
+      (args.prompt === undefined ||
+        args.prompt === 'candidate' ||
+        args.prompt === 'reasoning' ||
+        args.prompt === 'observation') &&
+      loadGame(this.context.pgn).isGameOver()
+    )
+      prompt = describeGameOver(this.context.pgn);
     if (
       Object.keys(args).some(
         (key) => !['version', 'referenceId', 'verificationIds', 'prompt'].includes(key),
@@ -304,7 +312,12 @@ export class CoachingVerification {
     return { text: this.published, reference: this.root, verificationIds: args.verificationIds };
   }
   finalText(_untrustedText: string) {
-    return this.published ?? neutralPrompts.retry;
+    return (
+      this.published ??
+      (loadGame(this.context.pgn).isGameOver()
+        ? describeGameOver(this.context.pgn)
+        : neutralPrompts.retry)
+    );
   }
   /** All provider-authored labels/notes are replaced with host-owned text before a visible tool mutates state. */
   visibleTool(name: string, args: Record<string, unknown>) {
