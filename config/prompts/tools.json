@@ -17,7 +17,7 @@
   {
     "name": "analyse_position",
     "label": "Analyse position",
-    "description": "Ask Stockfish for bounded variations on the current position. Scores are from White's perspective and are not player ratings. An optional legal fen analyses a separate question or demonstration without changing the main board.",
+    "description": "Run bounded Stockfish analysis from the exact referenced position. Counterfactual positions require a legal SAN moves path from that reference; an unrelated FEN is rejected. Returns a same-turn evidence ID tied to full FEN/version and the derived path.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -48,16 +48,114 @@
         "fen": {
           "type": "string",
           "maxLength": 120
+        },
+        "referenceId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "moves": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "type": "string",
+            "maxLength": 16
+          }
         }
       },
-      "required": ["version"],
+      "required": ["version", "referenceId"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "verify_claims",
+    "label": "Verify tactical claims",
+    "description": "Verify bounded structured attacks, check/mate assertions, or an exact engine variation. moves must be legally derived from the referenced board. engine-line requires the same-turn analysisId whose returned PV supports the entire continuation. Returns host-rendered factual text and a verification ID; does not publish arbitrary prose.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "referenceId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "moves": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "analysisId": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "claims": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": ["attack", "check", "checkmate", "engine-line"]
+              },
+              "from": {
+                "type": "string",
+                "pattern": "^[a-h][1-8]$"
+              },
+              "to": {
+                "type": "string",
+                "pattern": "^[a-h][1-8]$"
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["version", "referenceId", "claims"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "publish_coaching",
+    "label": "Publish checked coaching",
+    "description": "Publish host-rendered verified facts using same-turn verification IDs, optionally followed by a neutral teaching prompt. Free-form final assistant prose is withheld from players. Records assistance before verified advice is exposed; observation mode still requires the player to request hints.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "referenceId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "verificationIds": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "prompt": {
+          "enum": ["candidate", "reasoning", "retry", "observation", "acknowledgement"]
+        }
+      },
+      "required": ["version", "referenceId", "verificationIds"],
       "additionalProperties": false
     }
   },
   {
     "name": "start_activity",
     "label": "Set training activity",
-    "description": "Set a legal position or full game, or update the task heading/subtitle and assistance policy without changing the board. Replacing a board archives its continuation.",
+    "description": "Set a legal position or full game, or update the task heading/subtitle and assistance policy without changing the board. Replacing a board archives its continuation. Select an activityType for host-owned headings/instructions; free-form tactical headings are not displayed.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -69,23 +167,14 @@
           "type": "string",
           "maxLength": 120
         },
-        "heading": {
-          "type": "string",
-          "maxLength": 120
-        },
-        "subtitle": {
-          "type": "string",
-          "maxLength": 240
-        },
-        "goal": {
-          "type": "string",
-          "maxLength": 2000
-        },
         "playerSide": {
           "enum": ["w", "b"]
         },
         "quiet": {
           "type": "boolean"
+        },
+        "activityType": {
+          "enum": ["free-play", "calculation", "endgame", "observation"]
         }
       },
       "required": ["version"],
@@ -190,7 +279,7 @@
   {
     "name": "ask_question",
     "label": "Ask player",
-    "description": "Ask a short question, optionally attaching a separate legal board and target skill.",
+    "description": "Ask a short question, optionally attaching a separate legal board and target skill. Visible text is host-rendered from verificationId, or a neutral prompt; arbitrary tactical prose is withheld.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -205,6 +294,10 @@
         "skill": {
           "type": "string",
           "maxLength": 120
+        },
+        "verificationId": {
+          "type": "string",
+          "maxLength": 100
         }
       },
       "required": ["text"],
@@ -214,7 +307,7 @@
   {
     "name": "write_player_note",
     "label": "Write position note",
-    "description": "Attach a brief note to a move/position without taking keyboard focus. Revealing help requires a prior intervention record.",
+    "description": "Attach a brief note to a move/position without taking keyboard focus. Revealing help requires a prior intervention record. Visible text is host-rendered from verificationId, or a neutral prompt; arbitrary tactical prose is withheld.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -229,6 +322,10 @@
         "reason": {
           "type": "string",
           "maxLength": 500
+        },
+        "verificationId": {
+          "type": "string",
+          "maxLength": 100
         }
       },
       "required": ["version", "text", "reason"],
@@ -387,7 +484,7 @@
   {
     "name": "record_intervention",
     "label": "Record assistance",
-    "description": "Persist revealing assistance before exposing it to the player. Preserve timing, reason and position provenance.",
+    "description": "Persist revealing assistance before exposing it to the player. Preserve timing, reason and position provenance. Visible text is host-rendered from verificationId, or a neutral prompt; arbitrary tactical prose is withheld.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -409,6 +506,10 @@
         "text": {
           "type": "string",
           "maxLength": 2000
+        },
+        "verificationId": {
+          "type": "string",
+          "maxLength": 100
         }
       },
       "required": ["version", "trigger", "timing", "reason"],

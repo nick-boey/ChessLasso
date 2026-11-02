@@ -4,11 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Chess } from 'chess.js';
 import { CoachRuntime } from '../server/coach.js';
+import { boardFacts } from '../server/board-facts.js';
 
 const provider = process.env.CHESSLASSO_PROVIDER === 'fireworks' ? 'fireworks' : 'google';
 const model = process.env.CHESSLASSO_MODEL ?? 'gemini-3.8-flash';
 const directory = await mkdtemp(join(tmpdir(), 'chesslasso-live-check-'));
-const context = { fen: new Chess().fen(), pgn: '', version: 0 };
+const fen = new Chess().fen();
+const context = { fen, pgn: '', version: 0, boardFacts: boardFacts(fen, 0) };
+const assistance: unknown[] = [];
 const runtime = new CoachRuntime({
   sessionsDir: directory,
   getSettings: () => ({ mode: 'live', provider, model, timeoutMs: 45000 }),
@@ -16,9 +19,15 @@ const runtime = new CoachRuntime({
     text: await readFile('config/prompts/coach.md', 'utf8'),
     version: 'live-check',
   }),
-  invokeTool: async (name) => {
+  invokeTool: async (name, args) => {
+    if (name === 'record_verified_assistance') {
+      assistance.push(args);
+      return { recorded: true };
+    }
     if (name !== 'inspect_board')
-      throw new Error('Smoke check permits only board inspection and engine analysis.');
+      throw new Error(
+        'Smoke check permits only board inspection, verified analysis and synthetic assistance receipts.',
+      );
     return context;
   },
 });
@@ -26,7 +35,10 @@ try {
   const result = await runtime.run(await readFile('config/prompts/live-smoke.md', 'utf8'), context);
   assert.ok(result.actions.some((action) => action.name === 'inspect_board'));
   assert.ok(result.actions.some((action) => action.name === 'analyse_position'));
-  assert.ok(result.text.trim());
+  assert.ok(result.actions.some((action) => action.name === 'verify_claims'));
+  assert.ok(result.actions.some((action) => action.name === 'publish_coaching'));
+  assert.ok(assistance.length > 0);
+  assert.match(result.text, /returned Stockfish variation/);
   console.log(
     JSON.stringify({
       ok: true,

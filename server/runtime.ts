@@ -70,14 +70,22 @@ export class Runtime {
     this.store.checkpoint();
     for (const notify of this.listeners) notify();
   }
-  interventions(version: number) {
+  interventions(
+    version: number,
+    fen = this.store.workspace().game.fen,
+    gameId = this.store.workspace().gameId,
+  ) {
     return Number(
       (
         this.store.db
           .prepare(
-            "SELECT COUNT(*) AS total FROM events WHERE kind='assistance' AND json_extract(value,'$.version')=?",
+            `SELECT COUNT(*) AS total FROM events
+             WHERE kind='assistance' AND json_extract(value,'$.version')=?
+               AND COALESCE(json_extract(value,'$.scope'),'live')='live'
+               AND (json_extract(value,'$.fen') IS NULL OR json_extract(value,'$.fen')=?)
+               AND (json_extract(value,'$.gameId') IS NULL OR json_extract(value,'$.gameId')=?)`,
           )
-          .get(version) as { total: number }
+          .get(version, fen, gameId) as { total: number }
       ).total,
     );
   }
@@ -107,7 +115,7 @@ export class Runtime {
         version: workspace.version,
         gameId: workspace.gameId,
         assistanceStatus:
-          this.interventions(workspace.version - 1) > 0
+          this.interventions(workspace.version - 1, played.before, workspace.gameId) > 0
             ? 'assisted'
             : workspace.quiet
               ? 'independent-observation'
@@ -341,6 +349,9 @@ export class Runtime {
         this.store.event('assistance', {
           version: workspace.version,
           kind: 'coach_chat',
+          scope: reviewed ? 'review' : 'live',
+          fen: reviewed?.fen ?? workspace.game.fen,
+          gameId: workspace.gameId,
           classification: 'unclassified-content',
           action: result.action ?? 'text',
         });
@@ -424,6 +435,8 @@ export class Runtime {
       this.save(workspace, 'assistance', {
         version: workspace.version,
         kind: 'question_feedback',
+        scope: 'review',
+        gameId: workspace.gameId,
         fen,
       });
       const response = { text, workspace: this.state() };
@@ -486,17 +499,35 @@ export class Runtime {
     ];
     if (mutations.includes(name) && args.version !== workspace.version) throw new ConflictError();
     switch (name) {
+      case 'record_verification_failure':
+        this.store.event('coach_verification', { valid: false, ...args });
+        return { recorded: true };
+      case 'record_verified_assistance':
+        if (context && context.version !== workspace.version) throw new ConflictError();
+        this.store.event('assistance', {
+          ...args,
+          version: workspace.version,
+          fen: context?.fen ?? workspace.game.fen,
+          scope:
+            runRole === 'question-feedback' || (context && context.fen !== workspace.game.fen)
+              ? 'review'
+              : 'live',
+          gameId: workspace.gameId,
+          quiet: workspace.quiet,
+        });
+        return { recorded: true };
       case 'inspect_board':
       case 'get_position':
       case 'get_context': {
-        if (context && context.version !== workspace.version) throw new ConflictError();
+        const referenced = runRole === 'question-feedback' ? context : undefined;
+        if (referenced && referenced.version !== workspace.version) throw new ConflictError();
         if (args.version !== undefined && args.version !== workspace.version)
           throw new ConflictError();
-        return context
+        return referenced
           ? {
               ...this.coachContext(),
-              ...context,
-              boardFacts: boardFacts(context.fen, context.version),
+              ...referenced,
+              boardFacts: boardFacts(referenced.fen, referenced.version),
             }
           : this.coachContext();
       }
@@ -559,7 +590,12 @@ export class Runtime {
         const board = loadGame(workspace.game.pgn);
         board.setComment(args.text);
         workspace.game = snapshot(board);
-        this.save(workspace, 'assistance', { text: args.text, version: workspace.version });
+        this.save(workspace, 'assistance', {
+          text: args.text,
+          version: workspace.version,
+          reference: args.reference,
+          rootReference: args.rootReference,
+        });
         return { ok: true };
       }
       case 'read_history':
@@ -648,7 +684,13 @@ export class Runtime {
       case 'ask_question': {
         if (typeof args.fen === 'string') new Chess(args.fen);
         this.store.put('question', args);
-        this.store.event('assistance', { version: workspace.version, kind: 'question' });
+        this.store.event('assistance', {
+          version: workspace.version,
+          kind: 'question',
+          fen: args.fen,
+          reference: args.reference,
+          rootReference: args.rootReference,
+        });
         return { ok: true };
       }
       case 'search_history': {
