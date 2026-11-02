@@ -36,6 +36,8 @@ export type Meeting = {
 };
 export interface DailyCallbacks {
   snapshot(day: string): Promise<unknown>;
+  /** Upgrade an old frozen checkpoint without resnapshotting live evidence. */
+  prepareEvidence?(day: string, evidence: unknown): Promise<unknown>;
   propose(day: string, evidence: unknown): Promise<string>;
   critique(day: string, evidence: unknown, proposal: string, round: number): Promise<Critique>;
   revise(day: string, evidence: unknown, proposal: string, critique: Critique): Promise<string>;
@@ -103,6 +105,10 @@ export class DailyJobs {
       try {
         if (meeting.evidence === undefined) {
           meeting.evidence = await this.callbacks.snapshot(day);
+          await this.save(file, meeting);
+        }
+        if (this.callbacks.prepareEvidence) {
+          meeting.evidence = await this.callbacks.prepareEvidence(day, meeting.evidence);
           await this.save(file, meeting);
         }
         if (!meeting.proposal) {

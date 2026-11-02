@@ -1,3 +1,4 @@
+import { freezeEvidence, makeMeetingRequest } from './evidence.js';
 import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
@@ -12,18 +13,12 @@ import {
 } from './meeting-facts.js';
 import { parseProposal, qualityProposal, qualityReport } from './meeting-quality.js';
 import type { Runtime } from './runtime.js';
-import { coachingDay, type DailyCallbacks } from './jobs.js';
+import { type DailyCallbacks } from './jobs.js';
 
 export function createMeetingCallbacks(runtime: Runtime, directory: string): DailyCallbacks {
   return {
-    snapshot: async (day) => ({
-      day,
-      facts: meetingFacts(runtime.store, day),
-      games: runtime.store.get('game-index') ?? [],
-      stats: runtime.store.stats(),
-      ...runtime.store.dayEvents(day, coachingDay),
-      plan: runtime.store.read('plans/current.md'),
-    }),
+    snapshot: async (day) => freezeEvidence(runtime.store, day),
+    prepareEvidence: async (day, evidence) => freezeEvidence(runtime.store, day, evidence),
     propose: async (day, evidence) => {
       if (runtime.store.workspace().mode === 'mock')
         return JSON.stringify(
@@ -36,7 +31,7 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
           ),
         );
       const result = await runtime.paid(
-        JSON.stringify({ day, evidence }),
+        makeMeetingRequest(runtime.store, day, evidence, { stage: 'proposal' }),
         runtime.store.workspace(),
         'consolidation',
       );
@@ -55,7 +50,11 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
               actions: [],
             }
           : await runtime.paid(
-              JSON.stringify({ day, evidence, proposal, round, hostFacts: facts }),
+              makeMeetingRequest(runtime.store, day, evidence, {
+                stage: 'critique',
+                proposal,
+                round,
+              }),
               runtime.store.workspace(),
               'assistant-coach',
             );
@@ -89,7 +88,7 @@ export function createMeetingCallbacks(runtime: Runtime, directory: string): Dai
     },
     revise: async (day, evidence, proposal, critique) => {
       const result = await runtime.paid(
-        JSON.stringify({ day, evidence, proposal, critique }),
+        makeMeetingRequest(runtime.store, day, evidence, { stage: 'revision', proposal, critique }),
         runtime.store.workspace(),
         'consolidation',
       );

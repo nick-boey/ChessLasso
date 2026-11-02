@@ -111,6 +111,8 @@ export function meetingFacts(store: Store, day: string, supplied?: unknown) {
   };
   const gameCounts = games.map((game) => {
     try {
+      if (supplied !== undefined && !game.frozen)
+        throw new Error('Snapshot has no immutable PGN; live game context cannot replace it.');
       const pgn = game.frozen ? readChecked(store, game.frozen) : store.read(game.path);
       const board = new Chess();
       board.loadPgn(pgn);
